@@ -43,6 +43,7 @@ public sealed partial class TaskbarPlayerWindow : Window
     private TaskbarNative.Taskbar? _bar;
     private long _capturedAt;
     private int _misses;
+    private ScreenRect? _pendingTarget;   // 等待确认的新停靠位置（防止左右来回跳）
     private bool _pointerInside;
     private long _flashUntil;
     private bool _hidden;
@@ -232,16 +233,31 @@ public sealed partial class TaskbarPlayerWindow : Window
         var liveBar = TaskbarNative.FindAll().FirstOrDefault(b => b.Handle == environment.Bar.Handle);
         if (liveBar == null || !TaskbarLayout.CanDock(liveBar.Bounds, liveBar.Monitor, liveBar.Scale))
         {
+            // 任务栏不见了 / 自动隐藏收起：立即隐藏
+            Trace(liveBar == null ? "hide: taskbar window gone" : $"hide: taskbar not dockable bar={liveBar.Bounds}");
             HidePlayer();
             return;
         }
-        if (liveBar.Bounds != environment.Bar.Bounds) { _environment.Poke(); HidePlayer(); return; }
+        if (liveBar.Bounds != environment.Bar.Bounds)
+        {
+            // 任务栏位置和缓存的查询结果对不上：马上重新查询，期间保持原位（连续对不上约 1.2 秒才隐藏）
+            Trace($"taskbar moved, re-query (grace) live={liveBar.Bounds} cached={environment.Bar.Bounds}");
+            _environment.Poke();
+            MissOrHide();
+            return;
+        }
         Associate(environment.Bar);
         ApplyPalette(environment.Dark);
         _bar = environment.Bar;
-        if (TaskbarNative.FullscreenOn(environment.Bar, _hwnd) || TaskbarNative.ShellPopupOver(_bounds))
+        if (TaskbarNative.FullscreenOn(environment.Bar, _hwnd))
         {
             Trace("hide: fullscreen foreground window");
+            HidePlayer();
+            return;
+        }
+        if (TaskbarNative.ShellPopupOver(_bounds))
+        {
+            Trace("hide: taskbar thumbnail / tray overflow over the player");
             HidePlayer();
             return;
         }
@@ -255,6 +271,17 @@ public sealed partial class TaskbarPlayerWindow : Window
             return;
         }
         _misses = 0;
+        // 已经停好时，换位置要连续两次（约 0.8 秒）得到同一个目标才动：
+        // 任务栏动画、按钮增减过程中的一次性结果，不该让播放条在左右两侧之间来回跳。
+        if (AppWindow.IsVisible && target.Bounds != _bounds)
+        {
+            if (_pendingTarget != target.Bounds)
+            {
+                _pendingTarget = target.Bounds;
+                return;
+            }
+        }
+        _pendingTarget = null;
         if (!string.Equals(State.TaskbarPlayerMonitor, environment.Bar.Device, StringComparison.Ordinal))
             State.TaskbarPlayerMonitor = environment.Bar.Device;
         Place(target.Variant, target.Bounds);
@@ -265,6 +292,7 @@ public sealed partial class TaskbarPlayerWindow : Window
     {
         if (++_misses < 3) return;
         _misses = 0;
+        Trace("hide: grace period over (" + _trace + ")");
         HidePlayer();
     }
 

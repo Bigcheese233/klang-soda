@@ -105,7 +105,7 @@ public class AppState
     public int DesktopLyricFontSize { get; set; } = 30;
     public int? MiniX { get; set; }
     public int? MiniY { get; set; }
-    public bool TaskbarPlayerEnabled { get; set; }
+    public bool TaskbarPlayerEnabled { get; set; } = false;   // 任务栏播放条默认关闭，在“视图”或“设置 → 外观”里开启
     public string TaskbarPlayerMonitor { get; set; } = "";
     public string TaskbarPlayerSide { get; set; } = "right";    // 停靠在任务栏哪一侧：left | right
 
