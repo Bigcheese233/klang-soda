@@ -68,7 +68,7 @@
                     Grid.Row="1"
                     FontSize="12"
                     Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                    Text="Klang"
+                    Text="Klang Soda"
                     TextTrimming="CharacterEllipsis" />
                 <TextBlock
                     x:Name="MiniLyricText"

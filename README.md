@@ -1,192 +1,128 @@
 <div align="center">
-  <img src="Klang.WinUI/Assets/AppLogo.png" width="96" height="96" alt="Klang" />
-  <h1>Klang</h1>
-  <p>面向 Windows 的本地无损音乐播放器，集成网易云音乐</p>
+  <img src="Klang.WinUI/Assets/AppLogo.png" width="96" height="96" alt="Klang Soda" />
+  <h1>Klang Soda</h1>
+  <p>本地音乐、网易云、汽水音乐，一个窗口听歌。</p>
+  <p>Windows 桌面音乐播放器 · 同步歌词 · 任务栏播放条</p>
 
-  [![Release](https://img.shields.io/github/v/release/gwj0323/klang?label=release&color=blue)](https://github.com/gwj0323/klang/releases)
   [![License](https://img.shields.io/badge/license-GPL--3.0-green)](LICENSE)
-  ![Platform](https://img.shields.io/badge/platform-Windows%2010%20%2F%2011%20x64-lightgrey)
+  ![Platform](https://img.shields.io/badge/Windows-10%20%2F%2011%20x64-blue)
 </div>
 
----
+Klang Soda 将本地曲库、网易云和汽水音乐放在同一个桌面播放器里。你可以在主窗口浏览音乐、看封面和歌词，也可以把播放控制留在任务栏，工作时随手暂停、切歌。
 
-Klang 是一款 Windows 桌面音乐播放器，支持本地音频文件和网易云音乐。
+项目由 **Bigcheese233** 维护，主版本使用 WinUI 3。当前开发候选版本为 **2.7.6.1**，尚未发布正式安装包。版本变化和验证情况见 [版本记录](RELEASE_NOTES.md)。
 
-当前版本基于 WinUI 3 / .NET 10（`Klang.WinUI`）。早期的 PyQt6 版本保留在 `qt6_player`，见[文末](#pyqt6-旧版)。
+## 功能一览
 
-## 名称与设计理念
+| 功能 | 可以做什么 |
+| --- | --- |
+| 本地曲库 | 添加音乐文件夹，按歌曲、专辑、喜欢和歌单浏览，查看标签与封面 |
+| 网易云音乐 | 登录账号，使用每日推荐和我喜欢的音乐，与本地音乐共用播放器 |
+| 汽水音乐 | 扫码登录，收听推荐、我喜欢的音乐和八个模式 |
+| 任务栏播放条 | 在任务栏空白区域显示封面、曲目信息、歌词及播放控制，支持左右停靠和紧凑布局 |
+| 歌词与界面 | 同步歌词、桌面歌词、迷你播放器、封面与频谱显示 |
+| 音频设置 | 均衡器、音效、耳机校准、播放倍速与独占输出 |
 
-Klang 取自丹麦语 klang，意为声音、音色、余音。
+## 汽水音乐
 
-设计上遵循以下几点：
+汽水页面采用左侧导航、右侧播放信息的布局。账号、推荐、收藏和模式都在侧栏；播放后，右侧显示歌曲封面、信息、频谱及歌词。
 
-- 声音保持原样。默认不改动音频数据：按文件的原始采样率和位深解码，音效可以整体旁路，独占输出时不经过系统混音器。
-- 处理过程可查看。信号路径面板列出每一级处理，比特完美有明确的判定条件；音质分析给出频谱，由使用者自己判断。
-- 界面从简。使用系统材质与主题，功能按曲库、播放、歌词分层，需要时才出现。
-- 数据留在本地。曲库、播放统计和设置只保存在本机，联网功能可以关闭。
-- 自动行为给出依据。漫游选歌会显示理由；自动混音只在速度和节拍条件满足时进行，不满足就照常切歌。
-## 下载与安装
+点击模式即可开始播放，下一首会继续当前模式；接近队列末尾时继续补充歌曲。
 
-前往 [GitHub Releases](https://github.com/gwj0323/klang/releases) 下载最新版本（标签以 `-winui` 结尾的为 WinUI 版）：
+| | | | |
+| --- | --- | --- | --- |
+| 熟悉模式 | 新鲜模式 | Chill 放松 | 驾车 |
+| 摸鱼 | 粤语 | 动感健身 | 快乐时光 |
 
-| 文件 | 说明 |
-| :--- | :--- |
-| `Klang-Setup-<版本>-x64.exe` | 安装版。默认安装到当前用户目录，无需管理员权限，可选择创建桌面快捷方式，支持卸载与覆盖升级 |
-| `Klang-WinUI-win-x64.zip` | 绿色版。解压后运行 `Klang.WinUI.exe` |
+“我喜欢的音乐”支持读取收藏、分页浏览和选择歌曲播放。目前尚未提供汽水搜索、远程添加或取消收藏，以及音频缓存容量上限。汽水歌词使用逐行时间轴；歌曲能否播放取决于账号授权、音源与编码。
 
-- 系统要求：Windows 10 1809（17763）及以上，x64。应用自带运行时，无需另装 .NET。
-- 安装包与程序目前未做代码签名，首次运行时 Windows SmartScreen 可能给出提示，选择“更多信息 → 仍要运行”即可。
-- 用户数据保存在 `%LocalAppData%\Klang`，卸载不会删除。
+## 任务栏播放条
 
-## 功能
+通过顶部 **视图** 菜单、**设置 → 外观** 或快捷键 **`Ctrl+B`** 开启。
 
-### 音频与信号路径
-- 原始格式解码：基于 Media Foundation，按文件原始采样率与位深解码（实测可解码 24 bit / 192 kHz FLAC），支持 FLAC、WAV、ALAC、MP3、AAC、M4A、OGG、WMA 等常见格式以及 CUE 分轨。
-- WASAPI 独占模式：按文件原始采样率输出，绕过 Windows 混音器；声卡不支持时自动回退到共享模式，并在信号路径面板中说明原因。
-- 绕过全部音效：关闭均衡器、空间音效、混响和软限幅，音频原样输出。
-- 信号路径面板：逐级显示源文件 → 解码 → 变速 → 音效 → 音量 → 输出，并判定当前是否满足比特完美的条件（独占输出、音效旁路、音量 100%、无变速、无回放增益、输出格式不低于源）。
-- 变速不变调：0.5×–2.0×（WSOLA），回放增益（ReplayGain）。
-- DSP：5 段均衡器、空间音效、混响、人声 / 伴奏平衡、黑胶质感；内置 AutoEq 耳机补偿预设。
+- 在任务栏空白位置查看封面、曲目信息和同步歌词。
+- 直接播放、暂停、切换上一首或下一首。
+- 拖动选择左侧或右侧停靠；空间不足时使用紧凑布局，无法容纳时隐藏。
+- 自动判断全屏窗口、任务栏收起等状态。
 
-### 音质与音乐分析
-- 伪无损检测：分析平均频谱，识别 MP3 / AAC 转码、由 CD 音质升采样的 Hi-Res 文件以及位深填充，结果显示在曲库中，可按此筛选，并可在“音质分析”中查看频谱图。检测为启发式方法，结果仅供参考。
-- 速度与调性：后台分析 BPM、拍点位置和调性（Camelot 编号）。
-- 声学地图：将曲库按 10 维声学特征（响度、动态、频谱重心等）降维后绘制成二维图，点击即可从该曲开始播放；提供“播放相似歌曲”和按情绪（安静 / 专注 / 动感 / 明亮 / 沉稳）自动生成的智能歌单。
+播放条使用独立窗口叠加显示。多屏、混合 DPI、自动隐藏任务栏及第三方任务栏工具的组合仍需继续验证，详细实现见 [功能实现说明](docs/IMPLEMENTATION.md)。
 
-### 切歌与播放模式
-- 列表循环、单曲循环、随机播放，以及漫游模式：根据收听历史（完整播放、跳过、顺序、时段等）学习偏好并选择下一首，学习数据保存在本地，可随时重置。
-- 自动混音：歌曲临近结束时与下一首等功率交叉淡入淡出。两首速度相差 8% 以内时对齐节拍、匹配速度，并在中段做低频交接（同一时刻只保留一首歌的低音）；速度差过大或没有稳定节拍时，改为普通的交叉淡入淡出，并跳过结尾与开头的静音。混音时长可选短 / 标准 / 长，调性不相容时自动减半；开启回放增益时，增益随混音进度平滑过渡。可设为关闭 / 仅漫游模式 / 所有播放模式。网易云曲目在下一首预缓冲完成后同样参与混音；CUE 分轨不混音。
+## 运行与开始使用
 
-### 曲库管理
-- 监视多个音乐文件夹，新增、修改、删除自动同步；元数据未变化的文件跳过解析，启动快。
-- 按歌手 / 专辑 / 目录分组，按多种方式排序，多条件筛选（音质、缺封面、缺歌词、疑似伪无损、文件丢失等）。
-- 标签编辑（单曲与整张专辑批量编辑，写回音频文件）、重复歌曲检查、丢失文件重新定位。
-- 歌单、智能歌单（按音质、收藏、添加时间、播放次数、情绪等条件）、M3U / M3U8 导入与导出。
+当前以源码开发版本为主。正式安装包发布后会放在 [Releases](https://github.com/Bigcheese233/klang-soda/releases)，请以该页面实际发布的文件为准。
 
-### 歌词
-- 基于 Win2D 的歌词渲染：当前句放大、平滑滚动，支持逐字高亮（增强 LRC）、翻译与罗马音副行。
-- 本地 `.lrc`、内嵌歌词、网易云、[LRCLIB](https://lrclib.net) 多个来源；联网获取的歌词缓存在本地。
-- 歌词时间校准：整体提前或延后，也可点击“正在演唱的那一句”自动对齐，按歌曲分别保存。
-- 桌面歌词、歌词海报生成。
+| 环境 | 要求 |
+| --- | --- |
+| 系统 | Windows 10 1809 或更新版本，x64 |
+| 程序运行时 | 正式自包含包会附带 .NET 10 与 Windows App SDK，无需安装 .NET SDK |
+| 汽水组件 | 使用汽水功能需在本机安装 **官方汽水音乐 3.7.0** |
+| 登录窗口 | 本机需有可用的 **WebView2 Runtime** |
+| Node.js | 发布准备脚本会随包附带官方 Node.js 24.22.1；源码开发需自行准备 |
 
-### 网易云音乐
-- 扫码或 Cookie 登录，Cookie 使用 Windows DPAPI 加密保存，仅当前 Windows 用户可解密。
-- 同步“我喜欢的音乐”、个人与收藏的歌单、每日推荐；支持在线搜索与试听。
-- 标准、极高、无损 FLAC、Hi-Res、超清母带等音质可选，不可用时自动降级；本地缓存有大小上限，超出后清除最久未播放的文件。
+首次使用：
 
-### 任务栏播放条
-- 在“视图”或“设置 → 外观”开启（Ctrl+B）。支持透明背景、左右停靠、拖动吸附和空间避让；空间不足时显示紧凑布局，再不足则隐藏。点封面恢复主窗口。
-- 使用 Windows 原生窗口与 UI Automation API，不注入或修改 Explorer。全屏、任务栏自动收起或竖向任务栏时隐藏；多显示器停靠位置和左右偏好会自动保存。
+1. **听本地音乐**：在曲库中选择“添加”，导入音乐文件夹。
+2. **使用网易云**：切换到“云端”，按界面提示登录账号。
+3. **使用汽水**：切换到“汽水音乐”，点击登录，用手机汽水音乐 App 的“搜索 → 扫一扫”扫描二维码并确认；出现额外验证时在登录窗口内完成。
+4. **开启任务栏播放条**：通过“视图”菜单开启，或按 `Ctrl+B`。
 
-### 界面与系统集成
-- Windows 11 Mica / Acrylic 背景，浅色 / 深色 / 跟随系统。
-- 沉浸模式（随封面主色变化的动态背景）、迷你窗口、全屏。
-- Windows 系统媒体控件（SMTC）与多媒体键。
-- 界面语言：简体中文、English、Dansk；可在设置中检查 GitHub 上的新版本。
+汽水接入使用非官方协议，依赖本机官方组件完成设备注册和请求签名，并包含音频处理与解密逻辑。官方的 `device.node`、`bdms.node`、`metasecml.dll` 不随本项目分发；登录页会按需加载官方验证资源和第三方脚本。协议或验证流程变化可能导致功能失效，依赖及故障排查见 [运行说明](docs/RUNTIME.md)。
 
-## 隐私与网络请求
+## 账号与资料
 
-Klang 仅在以下情况联网，均可在设置中控制或不使用相应功能：
+程序默认将曲库状态、歌词、封面、波形、网易云缓存和汽水资料存放在：
 
-| 功能 | 访问对象 | 发送的内容 |
-| :--- | :--- | :--- |
-| 自动补全封面与歌词（设置中可关闭） | 网易云音乐、LRCLIB | 歌名、歌手、专辑、时长 |
-| 网易云账号与云端播放 | 网易云音乐 | 登录凭据与请求的曲目 |
-| 检查更新 | GitHub | 无个人信息 |
-
-曲库、播放统计和设置只保存在本机 `%LocalAppData%\Klang`。 完整说明见 [PRIVACY.md](PRIVACY.md)（简体中文 / English / Dansk）。
-
-## 快捷键
-
-| 按键 | 功能 |
-| :--- | :--- |
-| `Space` | 播放 / 暂停 |
-| `←` / `→` | 快退 / 快进 5 秒 |
-| `↑` / `↓` | 调节音量 |
-| `Ctrl + ←` / `Ctrl + →` | 上一首 / 下一首 |
-| `Ctrl + F` | 聚焦搜索框 |
-| `Ctrl + I` | 沉浸模式（`Esc` 退出） |
-| `Ctrl + M` | 迷你窗口 |
-| `Ctrl + D` | 桌面歌词 |
-| `Ctrl + T` | 切换歌词副行（翻译 / 罗马音） |
-| `Ctrl + +` / `Ctrl + -` | 放大 / 缩小歌词字号 |
-| `F11` | 全屏 |
-
-## 从源码构建
-
-环境：Windows 10 / 11 x64，[.NET 10 SDK](https://dotnet.microsoft.com/download)。
-
-```bash
-git clone https://github.com/gwj0323/klang.git
-cd klang
-
-# 运行
-dotnet run --project Klang.WinUI -c Release
-
-# 发布（自包含，win-x64）
-dotnet publish Klang.WinUI/Klang.WinUI.csproj -c Release -r win-x64 -p:Platform=x64 -o publish/Klang.WinUI
+```text
+%LocalAppData%\KlangSoda
 ```
 
-生成安装包需要 [Inno Setup 6](https://jrsoftware.org/isinfo.php)：
+汽水登录会话由当前 Windows 用户的 DPAPI 加密保存，缓存目录中的其他文件并非全部加密。退出账号不会自动清空所有缓存，具体保存内容与网络请求见 [隐私说明](PRIVACY.md)。
 
-```bash
-ISCC.exe /DAppVersion=2.4.0 /DSourceDir=..\publish\Klang.WinUI installer\Klang.iss
+Klang Soda 使用独立的安装标识和资料目录，不自动迁移旧 Klang 的曲库或账号。更新检查只读取本项目的发布列表。
+
+## 从源码运行
+
+在 Windows x64 上安装 .NET 10 SDK，并准备好 Node.js。使用汽水功能还需满足上面的官方组件和 WebView2 要求。
+
+在项目根目录执行：
+
+```powershell
+# 开发资料保存在项目下 Data/KlangSoda，与日常使用资料分开。
+$env:KLANG_DATA_DIR = Join-Path (Get-Location) 'Data'
+dotnet run --project Klang.WinUI/Klang.WinUI.csproj -c Debug -p:Platform=x64
 ```
 
-输出位于 `dist-installer/`。仓库的 GitHub Actions 工作流（`.github/workflows/build-exe.yml`，手动触发）会同时产出绿色版压缩包与安装包。
+主程序为 `Klang.Soda.exe`，源码入口位于 `Klang.WinUI/`。也可通过 `KLANG_SODA_NODE_EXE` 指定开发使用的 Node 可执行文件。
 
-### 目录结构
+<details>
+<summary>构建绿色版与安装程序</summary>
 
-| 路径 | 内容 |
-| :--- | :--- |
-| `Klang.WinUI/` | WinUI 3 应用（当前主版本） |
-| `Klang.WinUI/Services/` | 音频引擎、DSP、曲库、歌词、分析、网易云等服务 |
-| `Klang.WinUI/Languages/` | 界面语言文件（`en.json`、`da.json`，以中文原文为键） |
-| `installer/` | Inno Setup 安装脚本 |
-| `qt6_player/`、`src/` | 早期的 PyQt6 版本 |
-
-## PyQt6 旧版
-
-早期版本基于 PyQt6，功能与 WinUI 版有差异（例如没有独占模式与信号路径面板）。源码保留在 `qt6_player`，不再积极开发，Release 中无 `-winui` 后缀的版本即为该版本。
-
-```bash
-# 需要 Python 3.10+
-pip install -r requirements.txt
-python run_qt6_player.py
-
-# 打包为单文件（输出到 dist/Klang.exe）
-pyinstaller Klang.spec --noconfirm
+```powershell
+dotnet publish Klang.WinUI/Klang.WinUI.csproj -c Release -r win-x64 -p:Platform=x64 --self-contained true -o publish/KlangSoda
+./installer/PreparePublish.ps1 -PublishDirectory ./publish/KlangSoda
+# 需要 Inno Setup；SourceDir 相对 installer/Klang.iss 所在目录解析。
+ISCC.exe /DAppVersion=2.7.6.1 /DSourceDir=..\publish\KlangSoda installer/Klang.iss
 ```
 
-## 开源引用与致谢
+发布准备脚本会校验并附带 Node、许可证、说明及匹配的完整源码 ZIP，要求工作区干净且已提交。仅做本地构建检查时可传 `-SkipSourceArchive`，该模式不生成供正式分发使用的匹配源码归档。
 
-### WinUI 版
+GitHub Actions 的 **Build Klang Soda** 工作流手动触发，默认构建 WinUI 版本，产物保存在 Actions artifacts，不自动发布 Release。正式 WinUI Release 标签需包含 `winui` 和版本号，例如 `winui-v2.7.6.1`，供程序检查更新时识别。
 
-| 项目 | 许可证 | 用途 |
-| :--- | :--- | :--- |
-| [Windows App SDK / WinUI 3](https://github.com/microsoft/WindowsAppSDK) | MIT | 界面框架 |
-| [Win2D](https://github.com/microsoft/Win2D) | MIT | 歌词、频谱图与声学地图的绘制 |
-| [NAudio](https://github.com/naudio/NAudio) | MIT | 音频解码、WASAPI 输出 |
-| [TagLib#](https://github.com/mono/taglib-sharp) | LGPL-2.1 | 音频标签、封面与内嵌歌词读写 |
-| [QRCoder](https://github.com/codebude/QRCoder) | MIT | 登录二维码生成 |
-| [ComputeSharp](https://github.com/Sergio0694/ComputeSharp) | MIT | GPU 计算（动态背景） |
-| [AutoEq](https://github.com/jaakkopasanen/AutoEq) | MIT | 耳机频响补偿数据 |
-| [LRCLIB](https://lrclib.net) | — | 歌词数据来源（开放接口） |
-| [Open-Meteo](https://open-meteo.com) | CC BY 4.0（数据） | 沉浸背景的天气效果（可选，默认关闭） |
-| [Codrops RainEffect](https://github.com/codrops/RainEffect)（Lucas Bebber） | [Codrops 许可](https://tympanus.net/codrops/licensing/) | 沉浸背景的雨水效果：参考其水珠模拟算法（水珠贴图为本项目程序生成） |
+仓库中的 Qt/Python 目录保留历史源码，目前不包含 WinUI 版本的汽水接入功能；可选的旧版 Qt 构建默认关闭。
 
-### PyQt6 版
+</details>
 
-| 项目 | 许可证 | 用途 |
-| :--- | :--- | :--- |
-| [PyNCM](https://github.com/greats3an/pyncm) | GPL-3.0 | 网易云音乐 API |
-| [PyQt-Frameless-Window](https://github.com/zhiyiYo/PyQt-Frameless-Window) | LGPL-3.0 | 无边框窗口与 Mica / Acrylic |
-| [mutagen](https://github.com/quodlibet/mutagen) | GPL-2.0-or-later | 音频标签与封面 |
-| [python-qrcode](https://github.com/lincolnloop/python-qrcode) | BSD-3-Clause | 登录二维码 |
-| [Pillow](https://github.com/python-pillow/Pillow) | HPND | 图像处理 |
-| [NumPy](https://github.com/numpy/numpy) / [SciPy](https://github.com/scipy/scipy) | BSD-3-Clause | DSP 与颜色聚类 |
-| [PyQt6](https://www.riverbankcomputing.com/software/pyqt/) | GPL-3.0 | GUI 框架 |
+## 文档与反馈
 
-## 开源协议
+- [版本记录与验证情况](RELEASE_NOTES.md)
+- [运行依赖、登录与故障排查](docs/RUNTIME.md)
+- [功能实现及模块地图](docs/IMPLEMENTATION.md)
+- [上游同步记录](docs/UPSTREAM.md)
+- [隐私说明](PRIVACY.md)
+- [第三方代码与许可证](THIRD_PARTY_NOTICES.md)
 
-本项目采用 [GNU General Public License v3.0](LICENSE) 开源。
+使用问题和建议请提交到 [Issues](https://github.com/Bigcheese233/klang-soda/issues)，并附上程序版本、Windows 版本和复现步骤。分享日志前请移除账号、Cookie 等个人信息。
+
+## 致谢与许可
+
+Klang Soda 基于 [gwj0323/klang](https://github.com/gwj0323/klang) 发展，保留原作者署名、提交历史、图标归属和 [GNU GPL v3 许可证](LICENSE)。汽水相关引用及修改记录见 [第三方说明](THIRD_PARTY_NOTICES.md)。本项目独立维护，与网易云音乐及汽水音乐官方没有合作或隶属关系。

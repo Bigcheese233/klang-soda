@@ -26,7 +26,7 @@ public sealed record UpdateInfo(
 /// </summary>
 public static class UpdateService
 {
-    public const string Repo = "gwj0323/klang";
+    public const string Repo = AppIdentity.Repository;
     public const string RepoUrl = "https://github.com/" + Repo;
 
     private static readonly HttpClient Http = CreateClient();
@@ -52,17 +52,19 @@ public static class UpdateService
 
     public static string CurrentVersionText
     {
-        get { var v = CurrentVersion; return $"{v.Major}.{v.Minor}.{Math.Max(0, v.Build)}"; }
+        get { var v = CurrentVersion; return v.ToString(v.Revision > 0 ? 4 : 3); }
     }
 
-    private static readonly Regex VersionRx = new(@"(\d+)\.(\d+)(?:\.(\d+))?", RegexOptions.Compiled);
+    private static readonly Regex VersionRx = new(@"(\d+)\.(\d+)(?:\.(\d+))?(?:\.(\d+))?", RegexOptions.Compiled);
 
     private static bool TryParseVersion(string text, out Version version)
     {
         var m = VersionRx.Match(text);
         if (!m.Success) { version = new Version(0, 0, 0); return false; }
-        version = new Version(int.Parse(m.Groups[1].Value), int.Parse(m.Groups[2].Value),
-            m.Groups[3].Success ? int.Parse(m.Groups[3].Value) : 0);
+        int major = int.Parse(m.Groups[1].Value), minor = int.Parse(m.Groups[2].Value);
+        int build = m.Groups[3].Success ? int.Parse(m.Groups[3].Value) : 0;
+        version = m.Groups[4].Success ? new Version(major, minor, build, int.Parse(m.Groups[4].Value))
+            : new Version(major, minor, build);
         return true;
     }
 
@@ -76,6 +78,9 @@ public static class UpdateService
         var current = CurrentVersion;
 
         using var resp = await Http.GetAsync($"https://api.github.com/repos/{Repo}/releases?per_page=30", ct);
+        // 新独立仓库尚未建立或没有公开发布时，不回退到上游安装包。
+        if (resp.StatusCode == System.Net.HttpStatusCode.NotFound)
+            return new UpdateInfo(current, null, "", "", "", RepoUrl + "/releases", null, false);
         if (resp.StatusCode == System.Net.HttpStatusCode.Forbidden || (int)resp.StatusCode == 429)
             throw new InvalidOperationException(L.T("GitHub 暂时限制了请求，请稍后重试。"));
         resp.EnsureSuccessStatusCode();

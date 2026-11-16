@@ -129,7 +129,7 @@ public sealed partial class TransportBar : UserControl
     public void UpdateTrackState(string? title, string? artist, string? coverPath = null)
     {
         string t = string.IsNullOrWhiteSpace(title) ? L.T("未加载曲目") : title;
-        string a = string.IsNullOrWhiteSpace(artist) ? "Klang" : artist;
+        string a = string.IsNullOrWhiteSpace(artist) ? "Klang Soda" : artist;
         // 换歌：标题与歌手上移淡出后换成新内容再上浮淡入；只是信息补全时直接替换
         if (_lastTitle != null && _lastTitle != t && IsLoaded)
         {
@@ -174,7 +174,7 @@ public sealed partial class TransportBar : UserControl
     public void UpdateLyricSnippet(string text)
     {
         _snippetSeq++;
-        LyricSnippetText.Text = string.IsNullOrWhiteSpace(text) ? "Klang" : text;
+        LyricSnippetText.Text = string.IsNullOrWhiteSpace(text) ? "Klang Soda" : text;
     }
 
     public void UpdateEqBadge(string presetName)

@@ -607,5 +607,8 @@
     "（近期播放过）": "(afspillet for nylig)",
     "（尚未添加文件夹）": "(Der er ikke tilføjet nogen mapper endnu)",
     "，{0} 首未找到文件。": ", {0} blev ikke fundet."
-  }
+  },
+  "基于 gwj0323/klang 的独立维护版": "Selvstændigt vedligeholdt udgave baseret på gwj0323/klang",
+  "上游项目与原作者": "Originalprojekt og oprindelig forfatter",
+  "安装前请先退出 Klang Soda。": "Luk Klang Soda før installationen."
 }

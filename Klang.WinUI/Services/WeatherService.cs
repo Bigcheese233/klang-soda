@@ -23,7 +23,7 @@ public sealed class WeatherService
     private static HttpClient CreateClient()
     {
         var c = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
-        c.DefaultRequestHeaders.UserAgent.ParseAdd("Klang-WinUI (https://github.com/gwj0323/klang)");
+        c.DefaultRequestHeaders.UserAgent.ParseAdd("Klang-Soda (https://github.com/Bigcheese233/klang-soda)");
         return c;
     }
 

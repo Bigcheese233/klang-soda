@@ -11,14 +11,14 @@ namespace Klang_WinUI.Services;
 
 /// <summary>
 /// 波形进度条用的振幅概要：把整首歌分成固定数量的小段，每段取响度（RMS），归一化到 0–1。
-/// 第一次播放时在后台解码计算，结果缓存在 %LocalAppData%\Klang\Waveforms，之后直接读取。
+/// 第一次播放时在后台解码计算，结果缓存在独立资料目录 KlangSoda/Waveforms，之后直接读取。
 /// </summary>
 public static class WaveformService
 {
     public const int Buckets = 800;
 
     private static readonly string CacheDir = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Klang", "Waveforms");
+        StateService.ResolveDataDirectory(), "Waveforms");
 
     private static readonly ConcurrentDictionary<string, float[]> Memory = new();
     private static readonly SemaphoreSlim Gate = new(1, 1);   // 同一时间只解码一首，不和播放抢磁盘与 CPU

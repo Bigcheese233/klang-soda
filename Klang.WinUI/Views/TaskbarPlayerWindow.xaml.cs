@@ -523,9 +523,9 @@ public sealed partial class TaskbarPlayerWindow : Window
     public void UpdateTrack(TrackItem? track)
     {
         _track = track;
-        TitleText.Text = track == null ? "Klang" : string.IsNullOrWhiteSpace(track.Artist)
+        TitleText.Text = track == null ? "Klang Soda" : string.IsNullOrWhiteSpace(track.Artist)
             ? track.Title : $"{track.Title} - {track.Artist}";
-        ToolTipService.SetToolTip(TitleText, track == null ? "Klang" : $"{track.Title} · {track.Artist}");
+        ToolTipService.SetToolTip(TitleText, track == null ? "Klang Soda" : $"{track.Title} · {track.Artist}");
         UpdateLyric(null);
         UpdateFavorite();
         string? cover = track?.CoverPath;
@@ -550,7 +550,7 @@ public sealed partial class TaskbarPlayerWindow : Window
 
 
     public void UpdateLyric(string? lyric) => DetailText.Text = string.IsNullOrWhiteSpace(lyric)
-        ? (string.IsNullOrWhiteSpace(_track?.Artist) ? "Klang" : _track.Artist) : lyric;
+        ? (string.IsNullOrWhiteSpace(_track?.Artist) ? "Klang Soda" : _track.Artist) : lyric;
 
     public void UpdatePlayState(bool playing)
     {

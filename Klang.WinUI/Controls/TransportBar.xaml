@@ -128,7 +128,7 @@
                         x:Name="LyricSnippetText"
                         FontSize="12"
                         Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                        Text="Klang"
+                        Text="Klang Soda"
                         TextTrimming="CharacterEllipsis" />
                 </StackPanel>
 

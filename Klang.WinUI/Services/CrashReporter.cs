@@ -26,7 +26,7 @@ public static class CrashReporter
     private static bool _ownsMarker;   // 只有写下标记的那个进程退出时才删除它
 
     public static string AppVersion =>
-        typeof(CrashReporter).Assembly.GetName().Version?.ToString(3) ?? "?";
+        typeof(CrashReporter).Assembly.GetName().Version?.ToString() ?? "?";
 
     /// <summary>启动时调用（越早越好）。</summary>
     public static void Start()

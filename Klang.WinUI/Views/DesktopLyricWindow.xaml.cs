@@ -50,7 +50,7 @@ public sealed partial class DesktopLyricWindow : Window
         WindowHelpers.EnableDrag(this, WindowCard);
 
         MainLine.FontSize = Math.Clamp(State.DesktopLyricFontSize, 18, 56);
-        SetSingle("Klang");
+        SetSingle("Klang Soda");
 
         Toolbar.OpacityTransition = new ScalarTransition { Duration = TimeSpan.FromMilliseconds(180) };
         UpdatePlayState(AudioEngineService.Instance.IsPlaying);
@@ -84,7 +84,7 @@ public sealed partial class DesktopLyricWindow : Window
     /// <summary>没有歌词时显示“歌名 — 歌手”。</summary>
     private void ShowTrackInfo()
     {
-        if (_track == null) SetSingle("Klang");
+        if (_track == null) SetSingle("Klang Soda");
         else SetSingle($"{_track.Title} — {_track.Artist}");
     }
 

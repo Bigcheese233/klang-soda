@@ -87,7 +87,7 @@ public sealed partial class PosterDialog : ContentDialog
             await rtb.RenderAsync(PosterCard);
             var pixels = await rtb.GetPixelsAsync();
 
-            var dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyPictures), "Klang");
+            var dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyPictures), "KlangSoda");
             Directory.CreateDirectory(dir);
             var safeTitle = string.Concat(PosterTitle.Text.Select(c => Path.GetInvalidFileNameChars().Contains(c) ? '_' : c));
             var path = Path.Combine(dir, $"{safeTitle}_{DateTime.Now:yyyyMMdd_HHmmss}.png");

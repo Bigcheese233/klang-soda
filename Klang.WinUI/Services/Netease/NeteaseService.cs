@@ -65,7 +65,7 @@ public sealed class NeteaseService
     private NeteaseService()
     {
         _cacheDir = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Klang", "netease_cache");
+            StateService.ResolveDataDirectory(), "netease_cache");
         Directory.CreateDirectory(_cacheDir);
         RestoreSession();
     }

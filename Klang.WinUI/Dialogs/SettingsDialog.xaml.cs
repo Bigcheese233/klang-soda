@@ -77,7 +77,7 @@ public sealed partial class SettingsDialog : ContentDialog
         LyricSizeSlider.Value = Math.Clamp(State.LyricFontSize, 14, 40);
         LyricSizeText.Text = ((int)LyricSizeSlider.Value).ToString();
         StatePathText.Text = L.T("配置文件：") + Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Klang", "player_state.json");
+            StateService.ResolveDataDirectory(), "player_state.json");
         RebuildFolderList();
         AppVersionText.Text = L.F("版本 {0}（WinUI 3）", UpdateService.CurrentVersionText);
 
@@ -273,7 +273,7 @@ public sealed partial class SettingsDialog : ContentDialog
             }
             else if (_update.HasUpdate)
             {
-                UpdateStatusText.Text = L.F("发现新版本 {0}（当前 {1}）", _update.Latest.ToString(3), UpdateService.CurrentVersionText);
+                UpdateStatusText.Text = L.F("发现新版本 {0}（当前 {1}）", _update.Latest.ToString(_update.Latest.Revision > 0 ? 4 : 3), UpdateService.CurrentVersionText);
                 UpdateTitleText.Text = string.IsNullOrWhiteSpace(_update.Name) ? _update.Tag : _update.Name;
                 UpdateNotesText.Text = string.IsNullOrWhiteSpace(_update.Notes) ? L.T("（发布说明为空）") : _update.Notes.Trim();
                 DownloadUpdateBtn.IsEnabled = UpdateService.IsTrustedUrl(_update.DownloadUrl);

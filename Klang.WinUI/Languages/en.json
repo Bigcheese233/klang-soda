@@ -607,5 +607,8 @@
     "（近期播放过）": "(played recently)",
     "（尚未添加文件夹）": "(No folders added yet)",
     "，{0} 首未找到文件。": ", {0} not found."
-  }
+  },
+  "基于 gwj0323/klang 的独立维护版": "Independently maintained edition based on gwj0323/klang",
+  "上游项目与原作者": "Upstream project and original author",
+  "安装前请先退出 Klang Soda。": "Please quit Klang Soda before installing."
 }

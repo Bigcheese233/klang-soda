@@ -49,7 +49,7 @@ public sealed class MetadataService
     private MetadataService()
     {
         _coverDir = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Klang", "covers");
+            StateService.ResolveDataDirectory(), "covers");
         Directory.CreateDirectory(_coverDir);
     }
 

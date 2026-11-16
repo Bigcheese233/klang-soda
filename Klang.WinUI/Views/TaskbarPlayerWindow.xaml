@@ -98,7 +98,7 @@
                     <TextBlock x:Name="TitleText" Text="暂无播放曲目" FontSize="10" FontWeight="Medium" LineHeight="14"
                                LineStackingStrategy="BlockLineHeight" Foreground="{StaticResource TaskbarMutedBrush}"
                                TextTrimming="CharacterEllipsis" />
-                    <TextBlock x:Name="DetailText" Text="Klang" FontSize="11" FontWeight="SemiBold" LineHeight="15"
+                    <TextBlock x:Name="DetailText" Text="Klang Soda" FontSize="11" FontWeight="SemiBold" LineHeight="15"
                                LineStackingStrategy="BlockLineHeight" Foreground="{StaticResource TaskbarLyricBrush}"
                                TextTrimming="CharacterEllipsis" />
                 </StackPanel>

@@ -79,7 +79,7 @@ public sealed partial class MiniPlayerWindow : Window
         if (track == null)
         {
             MiniTitleText.Text = L.T("暂无播放曲目");
-            MiniArtistText.Text = "Klang";
+            MiniArtistText.Text = "Klang Soda";
             MiniLyricText.Text = "";
             ShowCover(null);
             return;

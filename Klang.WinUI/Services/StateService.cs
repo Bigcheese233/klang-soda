@@ -198,7 +198,7 @@ public class StateService
         var root = string.IsNullOrWhiteSpace(custom)
             ? Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData)
             : custom;
-        return Path.Combine(root, "Klang");
+        return Path.Combine(root, AppIdentity.DataDirectoryName);
     }
 
     private void Load()
