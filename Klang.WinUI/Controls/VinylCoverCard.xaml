@@ -96,13 +96,13 @@
                             <Grid>
                                 <Image
                                     x:Name="CoverImage"
-                                    Stretch="UniformToFill"
+                                    Stretch="UniformToFill" HorizontalAlignment="Center" VerticalAlignment="Center"
                                     Visibility="Collapsed" />
                                 <!-- 切歌时盖在上面的旧封面，淡出后隐藏 -->
                                 <Image
                                     x:Name="OldCoverImage"
                                     IsHitTestVisible="False"
-                                    Stretch="UniformToFill"
+                                    Stretch="UniformToFill" HorizontalAlignment="Center" VerticalAlignment="Center"
                                     Visibility="Collapsed" />
                             </Grid>
                         </Border>

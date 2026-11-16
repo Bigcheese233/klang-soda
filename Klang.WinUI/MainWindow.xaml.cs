@@ -195,6 +195,10 @@ public sealed partial class MainWindow : Window
         GalleryLayer.AlbumPicked += (s, tracks) => LeftNavPane.PlayQueue(tracks);
         LeftNavPane.FavoriteToggled += (s, track) => ToggleFavorite(track);
         LeftNavPane.CloudCoverReady += (s, track) => RefreshTrackCover(track);
+        LeftNavPane.CoversAdjusted += (s, tracks) =>
+        {
+            if (_currentTrack != null && tracks.Contains(_currentTrack)) RefreshTrackCover(_currentTrack);
+        };
         MetadataService.Instance.TrackEnriched += track => DispatcherQueue.SafeEnqueue(() =>
         {
             RefreshTrackCover(track);

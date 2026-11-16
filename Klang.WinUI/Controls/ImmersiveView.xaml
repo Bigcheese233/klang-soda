@@ -27,7 +27,7 @@
                     Height="380"
                     CornerRadius="18"
                     Background="#22FFFFFF">
-                    <Image x:Name="CoverImage" Stretch="UniformToFill" />
+                    <Image x:Name="CoverImage" Stretch="UniformToFill" HorizontalAlignment="Center" VerticalAlignment="Center" />
                 </Border>
                 <StackPanel Width="380" Spacing="4">
                     <TextBlock

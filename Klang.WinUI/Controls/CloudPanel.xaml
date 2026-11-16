@@ -221,7 +221,7 @@
                             FontSize="16"
                             Foreground="{ThemeResource TextFillColorTertiaryBrush}"
                             Glyph="&#xE8D6;" />
-                        <Image Source="{x:Bind CoverThumb, Mode=OneWay}" Stretch="UniformToFill" />
+                        <Image Source="{x:Bind CoverThumb, Mode=OneWay}" Stretch="UniformToFill" HorizontalAlignment="Center" VerticalAlignment="Center" />
                     </Grid>
                 </Border>
 

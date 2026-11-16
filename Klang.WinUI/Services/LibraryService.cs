@@ -194,7 +194,7 @@ public class LibraryService
                 Album = t.Album,
                 Duration = t.Duration,
                 FilePath = t.FilePath,
-                CoverPath = t.CoverPath ?? "",
+                CoverPath = t.OriginalCoverPath ?? "",   // 存原始封面；自定义封面另存在 CustomCovers
                 IsFavorite = t.IsFavorite,
                 SampleRate = t.SampleRate,
                 BitDepth = t.BitDepth,
@@ -360,7 +360,7 @@ public class LibraryService
                 QualityAnalysisService.Instance.Enqueue(new[] { existing });
                 RhythmAnalysisService.Instance.Enqueue(new[] { existing });
                 AudioFeatureService.Instance.Enqueue(new[] { existing });
-                if (!string.IsNullOrEmpty(t.CoverPath)) existing.CoverPath = t.CoverPath;
+                if (!string.IsNullOrEmpty(t.OriginalCoverPath)) existing.CoverPath = t.OriginalCoverPath;
                 existing.IsMissing = false;
                 continue;
             }
@@ -1018,7 +1018,7 @@ public class LibraryService
                 Album = !string.IsNullOrWhiteSpace(sheet.Album) ? sheet.Album : baseTrack.Album,
                 Duration = end > start ? end - start : 0,
                 FilePath = sheet.AudioFilePath,
-                CoverPath = baseTrack.CoverPath,
+                CoverPath = baseTrack.OriginalCoverPath,
                 FormatBadge = baseTrack.FormatBadge,
                 SampleRate = baseTrack.SampleRate,
                 BitDepth = baseTrack.BitDepth,

@@ -181,6 +181,9 @@ public sealed class CoverGalleryView : UserControl
         ElementCompositionPreview.SetIsTranslationEnabled(_hero, true);
 
         _heroCover.Stretch = Stretch.UniformToFill;
+        // 非正方形封面居中裁剪（默认左上对齐会只露出左半部分）
+        _heroCover.HorizontalAlignment = HorizontalAlignment.Center;
+        _heroCover.VerticalAlignment = VerticalAlignment.Center;
         _hero.Children.Add(_heroCover);
         // 压暗，保证歌词可读
         _hero.Children.Add(new Border { Background = new SolidColorBrush(Color.FromArgb(175, 8, 8, 12)) });
@@ -666,7 +669,8 @@ public sealed class CoverGalleryView : UserControl
         try
         {
             var bmp = new BitmapImage { DecodePixelWidth = (int)Math.Min(640, Math.Max(t.W, t.H) * 1.3) };
-            var img = new Image { Stretch = Stretch.UniformToFill, Source = bmp };
+            var img = new Image { Stretch = Stretch.UniformToFill, Source = bmp,
+                HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
             bmp.UriSource = new Uri(t.CoverPath!);
             img.ImageOpened += (s, e) =>
             {

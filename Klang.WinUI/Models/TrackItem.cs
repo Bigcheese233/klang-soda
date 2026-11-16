@@ -45,15 +45,26 @@ public class TrackItem : System.ComponentModel.INotifyPropertyChanged
     public string DurationStr => FormatDuration(Duration);
     public string FilePath { get; set; } = string.Empty;
     private string? _coverPath;
+    /// <summary>显示用的封面：用户调整过就用自定义封面，否则用原始封面。</summary>
     public string? CoverPath
     {
-        get => _coverPath;
+        get => Klang_WinUI.Services.CustomCoverService.Lookup(Id) ?? _coverPath;
         set
         {
             _coverPath = value;
             Raise(nameof(CoverPath));
             Raise(nameof(CoverThumb));
         }
+    }
+
+    /// <summary>原始封面（从文件提取 / 在线补全 / 云端缓存），不受自定义封面影响；保存曲库时存的是它。</summary>
+    public string? OriginalCoverPath => _coverPath;
+
+    /// <summary>自定义封面变了：通知界面重新取封面。</summary>
+    public void NotifyCoverChanged()
+    {
+        Raise(nameof(CoverPath));
+        Raise(nameof(CoverThumb));
     }
 
     /// <summary>列表里的封面缩略图（本地文件，或云端曲目尚未缓存时用网络小图）；没有封面时为 null。</summary>
@@ -64,7 +75,8 @@ public class TrackItem : System.ComponentModel.INotifyPropertyChanged
             try
             {
                 Uri? uri = null;
-                if (!string.IsNullOrEmpty(_coverPath) && File.Exists(_coverPath)) uri = new Uri(_coverPath);
+                var cover = CoverPath;
+                if (!string.IsNullOrEmpty(cover) && File.Exists(cover)) uri = new Uri(cover);
                 else if (!string.IsNullOrEmpty(CoverUrl))
                     uri = new Uri(CoverUrl.Contains('?') ? CoverUrl : CoverUrl + "?param=96y96");
                 return uri == null ? null : new Microsoft.UI.Xaml.Media.Imaging.BitmapImage(uri) { DecodePixelWidth = 96 };

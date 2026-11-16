@@ -157,6 +157,24 @@ public sealed partial class NavigationPane : UserControl
     /// <summary>云端曲目的封面缓存完成。</summary>
     public event EventHandler<TrackItem>? CloudCoverReady;
 
+    /// <summary>用户调整 / 恢复了这些曲目的封面。</summary>
+    public event EventHandler<IReadOnlyList<TrackItem>>? CoversAdjusted;
+
+    /// <summary>“调整封面…”：选取封面显示区域或换图（#18），完成后刷新列表和正在播放的界面。</summary>
+    public async System.Threading.Tasks.Task AdjustCoverAsync(TrackItem track)
+    {
+        try
+        {
+            var album = Dialogs.CoverAdjustDialog.AlbumOf(track, LibraryService.Instance.Tracks);
+            var (outcome, affected) = await Dialogs.CoverAdjustDialog.ShowAsync(XamlRoot, MainHwnd(), track, album);
+            if (outcome == Dialogs.CoverAdjustDialog.Outcome.Cancel || affected.Count == 0) return;
+            foreach (var t in affected) t.NotifyCoverChanged();
+            CoversAdjusted?.Invoke(this, affected);
+            if (_currentTab == "albums") RefreshView();   // 专辑网格的封面在建表时取，需要重建
+        }
+        catch (Exception ex) { App.LogError("Adjust cover", ex); }
+    }
+
     private bool _cloudShown;
 
     private void SearchBox_QuerySubmitted(AutoSuggestBox sender, AutoSuggestBoxQuerySubmittedEventArgs args)
@@ -832,6 +850,10 @@ public sealed partial class NavigationPane : UserControl
         var editTag = new MenuFlyoutItem { Text = L.T("编辑标签…"), Icon = new FontIcon { Glyph = "" } };
         editTag.Click += async (s, e) => await EditTrackTagsAsync(track);
         flyout.Items.Add(editTag);
+
+        var adjustCover = new MenuFlyoutItem { Text = L.T("调整封面…"), Icon = new FontIcon { Glyph = "" } };
+        adjustCover.Click += async (s, e) => await AdjustCoverAsync(track);
+        flyout.Items.Add(adjustCover);
 
         var analyze = new MenuFlyoutItem { Text = L.T("音质分析…"), Icon = new FontIcon { Glyph = "" } };
         analyze.IsEnabled = !track.IsOnline && !track.IsCueTrack && !track.IsMissing;
