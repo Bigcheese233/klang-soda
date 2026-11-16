@@ -6,6 +6,7 @@
   [![Release](https://img.shields.io/github/v/release/gwj0323/klang?label=release&color=blue)](https://github.com/gwj0323/klang/releases)
   [![License](https://img.shields.io/badge/license-GPL--3.0-green)](LICENSE)
   ![Platform](https://img.shields.io/badge/platform-Windows%2010%20%2F%2011%20x64-lightgrey)
+  [![Contributors](https://img.shields.io/github/contributors/gwj0323/klang?color=orange)](#贡献者)
 </div>
 
 ---
@@ -157,6 +158,40 @@ python run_qt6_player.py
 # 打包为单文件（输出到 dist/Klang.exe）
 pyinstaller Klang.spec --noconfirm
 ```
+
+## 贡献者
+
+感谢每一位为 Klang 出力的人。
+
+<div align="center">
+<table>
+  <tr>
+    <td align="center" valign="top" width="150">
+      <a href="https://github.com/gwj0323">
+        <img src="https://github.com/gwj0323.png?size=200" width="88" height="88" alt="gwj0323" /><br />
+        <sub><b>gwj0323</b></sub>
+      </a><br />
+      <sub>作者 · 维护</sub>
+    </td>
+    <td align="center" valign="top" width="150">
+      <a href="https://github.com/Bigcheese233">
+        <img src="https://github.com/Bigcheese233.png?size=200" width="88" height="88" alt="Bigcheese233" /><br />
+        <sub><b>Bigcheese233</b></sub>
+      </a><br />
+      <sub>任务栏播放条 <a href="https://github.com/gwj0323/klang/pull/19">#19</a></sub>
+    </td>
+    <td align="center" valign="top" width="150">
+      <a href="https://github.com/claude">
+        <img src="https://github.com/claude.png?size=200" width="88" height="88" alt="claude" /><br />
+        <sub><b>claude</b></sub>
+      </a><br />
+      <sub>开发协助</sub>
+    </td>
+  </tr>
+</table>
+
+<sub>完整名单见 <a href="https://github.com/gwj0323/klang/graphs/contributors">Contributors</a>。欢迎提交 <a href="https://github.com/gwj0323/klang/issues">Issue</a> 和 <a href="https://github.com/gwj0323/klang/pulls">Pull Request</a>。</sub>
+</div>
 
 ## 开源引用与致谢
 
