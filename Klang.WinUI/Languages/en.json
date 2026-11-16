@@ -3,6 +3,10 @@
   "strings": {
     "任务栏播放条": "Taskbar player",
     "关闭任务栏播放条": "Close taskbar player",
+    "将播控移动到此处": "Move the player here",
+    "松手固定播控": "Release to dock the player",
+    "拖动任务栏播放条": "Drag the taskbar player",
+    "拖动：放到任务栏左/右空白处停靠，拖离任务栏会回到原位": "Drag to an empty spot on the left or right of the taskbar to dock; dropping it off the taskbar puts it back",
     "拖动以调整任务栏位置": "Drag to reposition on the taskbar",
     "在任务栏上显示封面、歌词与播放控制。拖动左侧把手可调整位置，Ctrl+B 切换。": "Show artwork, lyrics and playback controls on the taskbar. Drag the left handle to reposition; toggle with Ctrl+B.",
     "切歌过渡": "Track transitions",

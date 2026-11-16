@@ -32,8 +32,7 @@ public class LibraryService
     public LibraryService()
     {
         _coversCacheDir = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "Klang",
+            StateService.ResolveDataDirectory(),
             "CoversCache"
         );
         Directory.CreateDirectory(_coversCacheDir);

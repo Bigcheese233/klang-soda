@@ -18,7 +18,7 @@ public static class WaveformService
     public const int Buckets = 800;
 
     private static readonly string CacheDir = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Klang", "Waveforms");
+        StateService.ResolveDataDirectory(), "Waveforms");
 
     private static readonly ConcurrentDictionary<string, float[]> Memory = new();
     private static readonly SemaphoreSlim Gate = new(1, 1);   // 同一时间只解码一首，不和播放抢磁盘与 CPU

@@ -56,7 +56,7 @@ public class LyricsService
 
     /// <summary>用户在“选择歌词”里选定的歌词，按曲目 ID 存放，优先于自动匹配（不改动音乐文件夹）。</summary>
     public static string ChosenDir => Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Klang", "LyricsChosen");
+        StateService.ResolveDataDirectory(), "LyricsChosen");
 
     private static string ChosenPath(string trackId, string suffix) =>
         Path.Combine(ChosenDir, string.Concat(trackId.Split(Path.GetInvalidFileNameChars())) + suffix);

@@ -25,7 +25,7 @@ public static class LrclibService
     }
 
     public static string CacheDir => Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Klang", "LyricsCache");
+        StateService.ResolveDataDirectory(), "LyricsCache");
 
     public static string CachePath(string trackId) => Path.Combine(CacheDir, trackId + ".lrc");
 

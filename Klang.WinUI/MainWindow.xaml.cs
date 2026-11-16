@@ -1308,9 +1308,17 @@ public sealed partial class MainWindow : Window
         State.TaskbarPlayerEnabled = enabled;
         TaskbarPlayerItem.IsChecked = enabled;
         StateService.Instance.RequestSave();
+        if (!enabled)
+        {
+            // 关掉就整个关闭窗口：连同后台的任务栏查询线程一起停掉，不再占用 Klang 和 Explorer 的 CPU
+            var w = _taskbarPlayerWindow;
+            _taskbarPlayerWindow = null;
+            if (w != null) { w.SetEnabled(false); w.Close(); }
+            return;
+        }
         _taskbarPlayerWindow?.UpdateTrack(_currentTrack);
         _taskbarPlayerWindow?.UpdatePlayState(AudioEngineService.Instance.IsPlaying);
-        _taskbarPlayerWindow?.SetEnabled(enabled);
+        _taskbarPlayerWindow?.SetEnabled(true);
     }
 
     private void ToggleMiniPlayer()

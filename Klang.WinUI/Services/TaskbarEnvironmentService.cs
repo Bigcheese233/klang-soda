@@ -16,7 +16,12 @@ internal sealed record TaskbarEnvironment(TaskbarNative.Taskbar Bar, IReadOnlyLi
 /// </summary>
 internal sealed class TaskbarEnvironmentService : IDisposable
 {
+    // 轮询间隔：任务栏有变化时 0.5 秒一次；连续没有变化就逐步放慢到 2 秒，减少对 Explorer 的跨进程查询。
+    private const int FastInterval = 500, SlowInterval = 2000;
     private readonly ManualResetEvent _stop = new(false);
+    private readonly AutoResetEvent _wake = new(false);
+    private int _interval = FastInterval;
+    private string _signature = "";
     private readonly object _gate = new();
     private IReadOnlyList<TaskbarEnvironment> _latest = Array.Empty<TaskbarEnvironment>();
     private long _updated;
@@ -24,11 +29,13 @@ internal sealed class TaskbarEnvironmentService : IDisposable
     private volatile bool _disposed;
     private readonly int _processId = Environment.ProcessId;
 
+    private readonly Thread _thread;
+
     public TaskbarEnvironmentService()
     {
-        var thread = new Thread(Poll) { IsBackground = true, Name = "Klang taskbar geometry" };
-        thread.SetApartmentState(ApartmentState.MTA);
-        thread.Start();
+        _thread = new Thread(Poll) { IsBackground = true, Name = "Klang taskbar geometry" };
+        _thread.SetApartmentState(ApartmentState.MTA);
+        _thread.Start();
     }
 
     public IReadOnlyList<TaskbarEnvironment> Snapshot()
@@ -50,24 +57,43 @@ internal sealed class TaskbarEnvironmentService : IDisposable
                     automation ??= new TaskbarAutomation();
                     var list = TaskbarNative.FindAll().Select(bar => new TaskbarEnvironment(bar, QueryBlanks(bar, automation), dark)).ToArray();
                     long elapsed = Environment.TickCount64 - started;
+                    string signature = Signature(list);
+                    int interval = signature == _signature ? Math.Min(_interval * 2, SlowInterval) : FastInterval;
+                    _signature = signature;
                     lock (_gate)
                     {
                         _latest = list;
                         _updated = Environment.TickCount64;
+                        _interval = interval;
                         // 某些 Explorer/UIA 提供程序一次查询就需数秒。固定 2 秒会让正常查询期间反复闪隐。
-                        // 仍有 15 秒硬上限；任务栏是否可见、全屏与 popup 遮挡另由 UI 线程即时核对。
-                        _validFor = Math.Clamp(elapsed * 2 + 1000, 2000, 15000);
+                        // 有效期要覆盖到下一次查询完成（间隔 + 查询耗时），仍有 15 秒硬上限；
+                        // 任务栏是否可见、全屏与 popup 遮挡另由 UI 线程即时核对。
+                        _validFor = Math.Clamp(elapsed * 2 + 1000 + interval, 2000, 15000);
                     }
                 }
                 catch (Exception ex)
                 {
-                    Debug.WriteLine($"Taskbar discovery: {ex.Message}");
-                    lock (_gate) _latest = Array.Empty<TaskbarEnvironment>();
+                    Debug.WriteLine($"Taskbar discovery: {ex.Message}");                    lock (_gate) { _latest = Array.Empty<TaskbarEnvironment>(); _interval = FastInterval; }
+                    _signature = "";
                 }
-            } while (!_stop.WaitOne(500) && !_disposed);
+            } while (WaitHandle.WaitAny(new WaitHandle[] { _stop, _wake }, _interval) != 0 && !_disposed);
         }
-        finally { automation?.Dispose(); _stop.Dispose(); }
+        finally { automation?.Dispose(); _stop.Dispose(); _wake.Dispose(); }
     }
+
+    /// <summary>任务栏可能刚变过（拖动开始、位置对不上）：马上重新查询，并回到快速轮询。</summary>
+    public void Poke()
+    {
+        lock (_gate)
+        {
+            if (_disposed) return;
+            _interval = FastInterval;
+            _wake.Set();
+        }
+    }
+
+    private static string Signature(IReadOnlyList<TaskbarEnvironment> list) =>
+        string.Join("|", list.Select(e => $"{e.Bar.Handle}:{e.Bar.Bounds}:{e.Dark}:{string.Join(",", e.Blanks)}"));
 
     private IReadOnlyList<ScreenRect> QueryBlanks(TaskbarNative.Taskbar bar, TaskbarAutomation automation)
     {
@@ -101,5 +127,8 @@ internal sealed class TaskbarEnvironmentService : IDisposable
             _disposed = true;
             _stop.Set();
         }
+        // 等正在进行的那次查询做完、COM 对象释放后再返回：
+        // 进程退出时如果直接中止正在跨进程查询的线程，可能让 Explorer 的任务栏无障碍接口卡住。
+        if (Thread.CurrentThread != _thread) _thread.Join(1500);
     }
 }

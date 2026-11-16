@@ -224,6 +224,7 @@ public sealed partial class TaskbarPlayerWindow : Window
         {
             // Explorer 偶尔一次查询失败不该让播放条闪没，连续 3 次（约 1.2 秒）才隐藏。
             Trace(_environment.Snapshot().Count == 0 ? "taskbar query failed (grace)" : "no taskbar on the saved monitor (grace)");
+            _environment.Poke();
             MissOrHide();
             return;
         }
@@ -234,7 +235,7 @@ public sealed partial class TaskbarPlayerWindow : Window
             HidePlayer();
             return;
         }
-        if (liveBar.Bounds != environment.Bar.Bounds) { HidePlayer(); return; }
+        if (liveBar.Bounds != environment.Bar.Bounds) { _environment.Poke(); HidePlayer(); return; }
         Associate(environment.Bar);
         ApplyPalette(environment.Dark);
         _bar = environment.Bar;
@@ -386,6 +387,7 @@ public sealed partial class TaskbarPlayerWindow : Window
             return;
         }
         _dragging = true;
+        _environment.Poke();
         _captureSurface = card;
         _dragStart = cursor;
         _moved = false;
@@ -549,8 +551,13 @@ public sealed partial class TaskbarPlayerWindow : Window
     }
 
 
-    public void UpdateLyric(string? lyric) => DetailText.Text = string.IsNullOrWhiteSpace(lyric)
-        ? (string.IsNullOrWhiteSpace(_track?.Artist) ? "Klang" : _track.Artist) : lyric;
+    /// <summary>主窗口每秒调用约 25 次；只有内容变了才改文字，避免反复重新排版。</summary>
+    public void UpdateLyric(string? lyric)
+    {
+        string text = string.IsNullOrWhiteSpace(lyric)
+            ? (string.IsNullOrWhiteSpace(_track?.Artist) ? "Klang" : _track.Artist) : lyric;
+        if (DetailText.Text != text) DetailText.Text = text;
+    }
 
     public void UpdatePlayState(bool playing)
     {
@@ -578,14 +585,24 @@ public sealed partial class TaskbarPlayerWindow : Window
     #endregion
 }
 
-/// <summary>任务栏播控条的轻量诊断日志：只记录状态变化，便于排查“为什么没显示”。</summary>
+/// <summary>
+/// 任务栏播控条的轻量诊断日志：只记录状态变化，便于排查“为什么没显示”。
+/// 正式版默认不写；调试版，或设置环境变量 KLANG_TASKBAR_TRACE=1 时才写入 taskbar-bar.log。
+/// </summary>
 internal static class TaskbarTrace
 {
     private static readonly string FilePath = System.IO.Path.Combine(
         StateService.ResolveDataDirectory(), "taskbar-bar.log");
 
+#if DEBUG
+    private static readonly bool Enabled = true;
+#else
+    private static readonly bool Enabled = Environment.GetEnvironmentVariable("KLANG_TASKBAR_TRACE") == "1";
+#endif
+
     public static void Write(string message)
     {
+        if (!Enabled) return;
         try
         {
             Directory.CreateDirectory(System.IO.Path.GetDirectoryName(FilePath)!);

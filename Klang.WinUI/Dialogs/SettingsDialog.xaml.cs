@@ -77,7 +77,7 @@ public sealed partial class SettingsDialog : ContentDialog
         LyricSizeSlider.Value = Math.Clamp(State.LyricFontSize, 14, 40);
         LyricSizeText.Text = ((int)LyricSizeSlider.Value).ToString();
         StatePathText.Text = L.T("配置文件：") + Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Klang", "player_state.json");
+            StateService.ResolveDataDirectory(), "player_state.json");
         RebuildFolderList();
         AppVersionText.Text = L.F("版本 {0}（WinUI 3）", UpdateService.CurrentVersionText);
 
