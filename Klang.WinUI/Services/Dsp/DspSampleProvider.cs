@@ -44,15 +44,41 @@ public class DspSampleProvider : ISampleProvider
         _fadeStep = (float)((target - _fadeGain) / frames);
     }
 
-    /// <summary>增益归零后重新淡入（跳转播放位置后调用）。</summary>
+    /// <summary>增益归零后重新淡入（跳转播放位置后调用）。静音暂停期间只归零，不淡入。</summary>
     public void RestartFadeIn(double ms = 25)
     {
         _fadeGain = 0f;
+        if (Gated) { _fadeTarget = 0f; _fadeStep = 0f; return; }
         RequestFade(1f, ms);
+    }
+
+    /// <summary>
+    /// 静音暂停（独占模式用）：淡出后不再读取音源，输出全零，但输出流一直在跑。
+    /// 独占模式下真正停止输出流，部分 USB 解码器会在没有数据时出杂音。
+    /// </summary>
+    public bool Gated { get; private set; }
+
+    public void GateOff(double fadeMs)
+    {
+        Gated = true;
+        RequestFade(0f, fadeMs);
+    }
+
+    public void GateOn(double fadeMs)
+    {
+        Gated = false;
+        RequestFade(1f, fadeMs);
     }
 
     public int Read(Span<float> buffer)
     {
+        // 已经淡到 0：输出静音，不读音源（播放位置停在暂停处）
+        if (Gated && _fadeGain <= 0f)
+        {
+            buffer.Clear();
+            return buffer.Length;
+        }
+
         int samplesRead = _source.Read(buffer);
         if (samplesRead <= 0) return samplesRead;
 
