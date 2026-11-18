@@ -24,6 +24,9 @@
     <!-- ComputeSharp 的源生成器要求（GPU 着色器） -->
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <Nullable>enable</Nullable>
+    <!-- 不把程序标记为 CET 兼容：.NET 9 起默认开启，CPU 支持 CET 但 Windows 缺少相关更新时，
+         运行时会在启动阶段直接报致命错误退出（#24，Windows 10 19041.2364） -->
+    <CETCompat>false</CETCompat>
   </PropertyGroup>
 
   <ItemGroup>
