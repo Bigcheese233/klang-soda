@@ -355,7 +355,7 @@ public sealed partial class MainWindow : Window
     {
         try
         {
-            _ = Services.Netease.NeteaseService.Instance.VerifyLoginAsync();
+            foreach (var src in Services.Cloud.CloudSources.All) _ = src.VerifyLoginAsync();
             await LibraryService.Instance.RestoreFromStateAsync();
             LeftNavPane.ReloadFromLibrary();
             MetadataService.Instance.Enqueue(LibraryService.Instance.Tracks);
@@ -370,7 +370,7 @@ public sealed partial class MainWindow : Window
             else if (State.LastOnlineQueue.Count > 0)
             {
                 // 云端曲目不在曲库里：用保存的快照还原那首歌和当时的云端队列
-                var queue = Services.Netease.NeteaseService.Instance.FromSnapshots(State.LastOnlineQueue);
+                var queue = Services.Cloud.CloudSources.FromSnapshots(State.LastOnlineQueue);
                 var online = queue.FirstOrDefault(t => t.Id == State.LastTrackId);
                 if (online != null)
                 {
@@ -517,7 +517,7 @@ public sealed partial class MainWindow : Window
     private void PlayTrack(TrackItem track, bool autoPlay = true)
     {
         CrashReporter.Note($"{(autoPlay ? "播放" : "载入")}：{track.Artist} - {track.Title}" +
-            (track.IsOnline ? "（网易云）" : $"（{System.IO.Path.GetExtension(track.FilePath)} {track.SampleRate}Hz/{track.BitDepth}bit）") +
+            (track.IsOnline ? $"（{Services.Cloud.CloudSources.For(track)?.DisplayName ?? track.CloudSource}）" :$"（{System.IO.Path.GetExtension(track.FilePath)} {track.SampleRate}Hz/{track.BitDepth}bit）") +
             (_adoptingMix ? " 混音接入" : ""));
         // 文件已经丢了：不开始播放，提示一下（启动时恢复上次曲目只显示，不拦）
         if (autoPlay && track.IsMissing && !track.IsOnline)
@@ -623,7 +623,7 @@ public sealed partial class MainWindow : Window
             int start = Math.Clamp(i - MaxSavedOnlineQueue / 2, 0, online.Count - MaxSavedOnlineQueue);
             online = online.GetRange(start, MaxSavedOnlineQueue);
         }
-        State.LastOnlineQueue = online.Select(Services.Netease.NeteaseService.ToSnapshot).ToList();
+        State.LastOnlineQueue = online.Select(Services.Cloud.CloudSources.ToSnapshot).ToList();
         _savedOnlineQueue = queue.Contains(track) ? queue : null;
     }
 
@@ -705,8 +705,6 @@ public sealed partial class MainWindow : Window
     private System.Threading.CancellationTokenSource? _onlineCts;
     private string _onlineStatus = "";
 
-    private static bool IsNeteaseLoggedIn() => Services.Netease.NeteaseService.Instance.IsLoggedIn;
-
     /// <summary>云端曲目：取直链并下载缓存后播放，同时异步加载歌词。后点的曲目会取消先前的请求。</summary>
     private async System.Threading.Tasks.Task PlayOnlineAsync(TrackItem track, bool autoPlay, bool adopted = false)
     {
@@ -714,12 +712,19 @@ public sealed partial class MainWindow : Window
         _onlineStatus = "";
         var cts = _onlineCts = new System.Threading.CancellationTokenSource();
         var ct = cts.Token;
-        var netease = Services.Netease.NeteaseService.Instance;
+        var source = Services.Cloud.CloudSources.For(track);
+        if (source == null)
+        {
+            // 来源已不存在（例如曲目来自之后被移除的平台）
+            _onlineStatus = L.T("无法获取音源（不支持的云端来源）");
+            BottomTransportBar.UpdateLyricSnippet(_onlineStatus);
+            return;
+        }
 
         int seq = _playSeq;
 
         // 歌词与音源并行获取（淡出旧曲的同时就开始请求）
-        var lyricTask = netease.GetLyricsAsync(track.NeteaseId, ct);
+        var lyricTask = source.GetLyricsAsync(track.CloudId, ct);
         if (!adopted)
         {
             BottomTransportBar.UpdateLyricSnippet(autoPlay ? L.T("正在获取云端音源…") : L.T("云端曲目"));
@@ -730,14 +735,14 @@ public sealed partial class MainWindow : Window
 
         try
         {
-            bool ok = await netease.ResolveAsync(track, ct);
+            bool ok = await source.ResolveAsync(track, ct);
             if (ct.IsCancellationRequested || _currentTrack != track) return;
 
             if (!ok)
             {
-                _onlineStatus = IsNeteaseLoggedIn()
+                _onlineStatus = source.IsLoggedIn
                     ? L.T("无法获取音源（可能为会员专享或无版权）")
-                    : L.T("无法获取音源（可能需要先登录网易云）");
+                    : L.F("无法获取音源（可能需要先登录{0}）", source.DisplayName);
                 BottomTransportBar.UpdateLyricSnippet(_onlineStatus);
             }
             else
@@ -887,7 +892,7 @@ public sealed partial class MainWindow : Window
                 if (next != null) { _preChosenNext = next; _preChosenReason = reason; _preChosenByRoam = byRoam; }
             }
             if (next == null || next == cur || !next.IsOnline) return;
-            Services.Netease.NeteaseService.Instance.Prefetch(next);
+            Services.Cloud.CloudSources.For(next)?.Prefetch(next);
         }
         catch { }
     }
@@ -933,15 +938,16 @@ public sealed partial class MainWindow : Window
             // 剩余时间不多了还没好，就放弃混音，照常切歌
             if (next.IsOnline)
             {
-                var netease = Services.Netease.NeteaseService.Instance;
-                if (!netease.IsCached(next))
+                var source = Services.Cloud.CloudSources.For(next);
+                if (source == null) return;
+                if (!source.IsCached(next))
                 {
-                    netease.Prefetch(next);
+                    source.Prefetch(next);
                     if (remaining > 12) _plannedFromId = null;
                     return;
                 }
                 if (string.IsNullOrEmpty(next.FilePath) || !System.IO.File.Exists(next.FilePath))
-                    await netease.ResolveAsync(next, System.Threading.CancellationToken.None);   // 已缓存：只是把本地路径写到曲目上
+                    await source.ResolveAsync(next, System.Threading.CancellationToken.None);   // 已缓存：只是把本地路径写到曲目上
             }
             if (string.IsNullOrEmpty(next.FilePath) || !System.IO.File.Exists(next.FilePath)) return;
 
@@ -1535,7 +1541,9 @@ public sealed partial class MainWindow : Window
     {
         try
         {
-            var b = await Services.Netease.NeteaseService.Instance.GetLyricsAsync(track.NeteaseId);
+            var source = Services.Cloud.CloudSources.For(track);
+            if (source == null) return;
+            var b = await source.GetLyricsAsync(track.CloudId);
             if (_currentTrack != track || string.IsNullOrWhiteSpace(b.Lrc) || LyricsService.HasChosen(track.Id)) return;
             StageLyricsControl.LoadLyricLines(LyricsService.Instance.ParseLrc(b.Lrc, b.Trans, b.Roma));
             SyncImmersive();

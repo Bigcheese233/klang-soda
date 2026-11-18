@@ -618,6 +618,13 @@
     "（请选择歌词）": "(Vælg tekster)",
     "（近期播放过）": "(afspillet for nylig)",
     "（尚未添加文件夹）": "(Der er ikke tilføjet nogen mapper endnu)",
-    "，{0} 首未找到文件。": ", {0} blev ikke fundet."
+    "，{0} 首未找到文件。": ", {0} blev ikke fundet.",
+    "网易云音乐": "NetEase Cloud Music",
+    "登录{0}": "Log ind på {0}",
+    "无法获取音源（可能需要先登录{0}）": "Kan ikke hente lydkilden (du skal muligvis logge ind på {0})",
+    "无法获取音源（不支持的云端来源）": "Kan ikke hente lydkilden (ikke-understøttet cloud-kilde)",
+    "{0} · 这首歌的歌词": "{0} · sangtekst til dette nummer",
+    "{0}提供的默认歌词": "Standardsangtekst fra {0}",
+    "云端来源": "Cloud-kilde"
   }
 }

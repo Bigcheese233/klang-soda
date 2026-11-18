@@ -50,7 +50,16 @@ public class SavedTrack
 /// <summary>云端曲目的最小记录：云端歌曲不在曲库里，重启后靠它恢复上次播放的曲目和队列。</summary>
 public class OnlineTrackSnapshot
 {
-    public string NeteaseId { get; set; } = "";
+    public string Source { get; set; } = "netease";   // 云端来源的标识
+    public string CloudId { get; set; } = "";           // 曲目在该平台上的 id
+
+    /// <summary>旧字段（只读入不写出）：之前的开发版本用它存网易云 id。</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? NeteaseId
+    {
+        get => null;
+        set { if (!string.IsNullOrEmpty(value) && CloudId.Length == 0) CloudId = value; }
+    }
     public string Title { get; set; } = "";
     public string Artist { get; set; } = "";
     public string Album { get; set; } = "";
@@ -143,6 +152,8 @@ public class AppState
     public int WindowWidth { get; set; } = 1280;
     public int WindowHeight { get; set; } = 820;
     public bool WindowMaximized { get; set; }
+
+    public string CloudSource { get; set; } = "netease";    // 云端面板当前显示的来源
 
     // 网易云：Cookie 用 DPAPI 加密后保存
     public string NeteaseCookiesEnc { get; set; } = "";

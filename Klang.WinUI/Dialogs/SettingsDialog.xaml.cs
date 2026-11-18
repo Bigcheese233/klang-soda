@@ -429,7 +429,7 @@ public sealed partial class SettingsDialog : ContentDialog
         if (AutoMetaSwitch.IsOn) MetadataService.Instance.Enqueue(LibraryService.Instance.Tracks);
     }
 
-    #region 网易云缓存
+    #region 云端缓存（所有来源合计）
 
     private static string FormatBytes(long b) =>
         b >= 1L << 30 ? $"{b / (double)(1L << 30):0.##} GB" :
@@ -437,7 +437,12 @@ public sealed partial class SettingsDialog : ContentDialog
 
     private void RefreshCacheInfo()
     {
-        var (count, bytes) = Services.Netease.NeteaseService.Instance.GetCacheInfo();
+        int count = 0; long bytes = 0;
+        foreach (var src in Services.Cloud.CloudSources.All)
+        {
+            var (c, b) = src.GetCacheInfo();
+            count += c; bytes += b;
+        }
         CacheInfoText.Text = L.F("已缓存 {0} 首，占用 {1}", count, FormatBytes(bytes));
     }
 
@@ -450,7 +455,12 @@ public sealed partial class SettingsDialog : ContentDialog
 
     private void ClearCacheBtn_Click(object sender, RoutedEventArgs e)
     {
-        var (n, bytes) = Services.Netease.NeteaseService.Instance.ClearCache();
+        int n = 0; long bytes = 0;
+        foreach (var src in Services.Cloud.CloudSources.All)
+        {
+            var (f, b) = src.ClearCache();
+            n += f; bytes += b;
+        }
         RefreshCacheInfo();
         CacheInfoText.Text += L.F("（已清理 {0} 个文件，释放 {1}）", n, FormatBytes(bytes));
     }

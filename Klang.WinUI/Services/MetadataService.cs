@@ -161,7 +161,7 @@ public sealed class MetadataService
             var m = await FindMatchAsync(t);
             if (m != null)
             {
-                t.MetaNeteaseId = m.NeteaseId;
+                t.MetaNeteaseId = m.CloudId;
                 if (t.Album == UnknownAlbum && !string.IsNullOrWhiteSpace(m.Album)) { t.Album = m.Album; changed = true; }
                 if (t.Artist == UnknownArtist && m.Artist != UnknownArtist) { t.Artist = m.Artist; changed = true; }
                 if (NeedsCover(t) && !string.IsNullOrEmpty(m.CoverUrl))
@@ -201,7 +201,7 @@ public sealed class MetadataService
     }
 
     /// <summary>取在线歌词（本地没有歌词时用）：必要时先搜索匹配，返回 null 表示没找到。</summary>
-    public async Task<NeteaseService.LyricBundle?> FetchLyricsAsync(TrackItem t, CancellationToken ct)
+    public async Task<Cloud.LyricBundle?> FetchLyricsAsync(TrackItem t, CancellationToken ct)
     {
         if (!Enabled || t.IsOnline || t.IsCueTrack) return null;
         try
@@ -210,7 +210,7 @@ public sealed class MetadataService
             {
                 var m = await FindMatchAsync(t);
                 if (m == null) return null;
-                t.MetaNeteaseId = m.NeteaseId;
+                t.MetaNeteaseId = m.CloudId;
                 SaveLibraryOnUi();
             }
             ct.ThrowIfCancellationRequested();

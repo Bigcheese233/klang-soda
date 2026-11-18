@@ -618,6 +618,13 @@
     "（请选择歌词）": "(Choose lyrics)",
     "（近期播放过）": "(played recently)",
     "（尚未添加文件夹）": "(No folders added yet)",
-    "，{0} 首未找到文件。": ", {0} not found."
+    "，{0} 首未找到文件。": ", {0} not found.",
+    "网易云音乐": "NetEase Cloud Music",
+    "登录{0}": "Sign in to {0}",
+    "无法获取音源（可能需要先登录{0}）": "Can't get the audio source (you may need to sign in to {0})",
+    "无法获取音源（不支持的云端来源）": "Can't get the audio source (unsupported cloud source)",
+    "{0} · 这首歌的歌词": "{0} · lyrics for this track",
+    "{0}提供的默认歌词": "Default lyrics from {0}",
+    "云端来源": "Cloud source"
   }
 }

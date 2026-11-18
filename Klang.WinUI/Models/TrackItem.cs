@@ -77,7 +77,7 @@ public class TrackItem : System.ComponentModel.INotifyPropertyChanged
                 Uri? uri = null;
                 var cover = CoverPath;
                 if (!string.IsNullOrEmpty(cover) && File.Exists(cover)) uri = new Uri(cover);
-                else if (Klang_WinUI.Services.NetGuard.IsNeteaseUrl(CoverUrl))
+                else if (Klang_WinUI.Services.Cloud.CloudSources.For(this)?.IsTrustedUrl(CoverUrl) == true)
                     uri = new Uri(CoverUrl.Contains('?') ? CoverUrl : CoverUrl + "?param=96y96");
                 return uri == null ? null : new Microsoft.UI.Xaml.Media.Imaging.BitmapImage(uri) { DecodePixelWidth = 96 };
             }
@@ -201,10 +201,12 @@ public class TrackItem : System.ComponentModel.INotifyPropertyChanged
     /// <summary>在线补全时匹配到的网易云歌曲 ID（用于取歌词）。</summary>
     public string MetaNeteaseId { get; set; } = string.Empty;
 
-    /// <summary>网易云歌曲 ID；非空表示云端曲目（FilePath 在解析音源后才有值）。</summary>
-    public string NeteaseId { get; set; } = string.Empty;
+    /// <summary>云端来源的标识（见 Services.Cloud.CloudSources）；空字符串按网易云处理。</summary>
+    public string CloudSource { get; set; } = string.Empty;
+    /// <summary>曲目在云端平台上的 ID；非空表示云端曲目（FilePath 在解析音源后才有值）。</summary>
+    public string CloudId { get; set; } = string.Empty;
     public string CoverUrl { get; set; } = string.Empty;
-    public bool IsOnline => NeteaseId.Length > 0;
+    public bool IsOnline => CloudId.Length > 0;
 
     /// <summary>ReplayGain 标签（dB / 峰值），没有标签时为 null。</summary>
     public double? ReplayGainDb { get; set; }
