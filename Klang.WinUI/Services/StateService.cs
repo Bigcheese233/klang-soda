@@ -47,6 +47,17 @@ public class SavedTrack
     public string Camelot { get; set; } = "";
 }
 
+/// <summary>云端曲目的最小记录：云端歌曲不在曲库里，重启后靠它恢复上次播放的曲目和队列。</summary>
+public class OnlineTrackSnapshot
+{
+    public string NeteaseId { get; set; } = "";
+    public string Title { get; set; } = "";
+    public string Artist { get; set; } = "";
+    public string Album { get; set; } = "";
+    public double Duration { get; set; }
+    public string CoverUrl { get; set; } = "";
+}
+
 /// <summary>漫游模型里每首歌的行为统计。</summary>
 public class RoamStat
 {
@@ -142,6 +153,8 @@ public class AppState
     public int NeteaseCacheLimitMb { get; set; } = 2048;
 
     public string LastTrackId { get; set; } = "";
+    // 上次播放的是云端曲目时，保存当时的云端队列（含那首歌）；播放本地曲目后清空
+    public List<OnlineTrackSnapshot> LastOnlineQueue { get; set; } = new();
     public List<string> WatchedFolders { get; set; } = new();
     public Dictionary<string, List<string>> CustomPlaylists { get; set; } = new();
     public List<SmartPlaylistDef> SmartPlaylists { get; set; } = new();

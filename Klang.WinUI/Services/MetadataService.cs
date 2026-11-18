@@ -93,9 +93,13 @@ public sealed class MetadataService
 
     #region 匹配
 
+    // 去掉括号里的附注。曲目名来自文件标签，可能很长或括号不配对；用不回溯的引擎保证线性时间。
+    private static readonly Regex BracketRx = new(@"[\(\[（【][^\)\]）】]*[\)\]）】]", RegexOptions.NonBacktracking);
+    private static readonly Regex SpacedBracketRx = new(@"\s*[\(\[（【][^\)\]）】]*[\)\]）】]", RegexOptions.NonBacktracking);
+
     private static string Normalize(string s)
     {
-        s = Regex.Replace(s ?? "", @"[\(\[（【].*?[\)\]）】]", "");
+        s = BracketRx.Replace(s ?? "", "");
         s = Regex.Replace(s, @"[\s\-_·・,，.。!！?？'""“”]+", "");
         return s.ToLowerInvariant();
     }
@@ -103,7 +107,7 @@ public sealed class MetadataService
     /// <summary>从曲目推出搜索词；文件名常见 “歌手 - 歌名”，整串交给搜索即可。</summary>
     private static string Keyword(TrackItem t)
     {
-        var title = Regex.Replace(t.Title, @"\s*[\(\[（【].*?[\)\]）】]", "").Trim();
+        var title = SpacedBracketRx.Replace(t.Title, "").Trim();
         return t.Artist != UnknownArtist ? $"{title} {t.Artist}" : title;
     }
 
@@ -180,6 +184,7 @@ public sealed class MetadataService
 
     private async Task<string?> DownloadCoverAsync(TrackItem t, string url)
     {
+        if (!NetGuard.IsNeteaseUrl(url)) return null;
         try
         {
             var u = url.Contains('?') ? url : url + "?param=800y800";

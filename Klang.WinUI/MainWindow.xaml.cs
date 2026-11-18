@@ -367,6 +367,18 @@ public sealed partial class MainWindow : Window
                 LeftNavPane.ResetQueue();
                 PlayTrack(last, autoPlay: false);
             }
+            else if (State.LastOnlineQueue.Count > 0)
+            {
+                // 云端曲目不在曲库里：用保存的快照还原那首歌和当时的云端队列
+                var queue = Services.Netease.NeteaseService.Instance.FromSnapshots(State.LastOnlineQueue);
+                var online = queue.FirstOrDefault(t => t.Id == State.LastTrackId);
+                if (online != null)
+                {
+                    LeftNavPane.RestoreQueue(queue);
+                    _savedOnlineQueue = LeftNavPane.Queue;
+                    PlayTrack(online, autoPlay: false);
+                }
+            }
 
             // 后台：核对文件还在不在 → 增量扫描已添加的文件夹（没变的文件直接跳过）→ 开始监视文件夹变化
             _ = SyncLibraryInBackgroundAsync();
@@ -564,6 +576,7 @@ public sealed partial class MainWindow : Window
         if (!track.IsOnline && !track.IsCueTrack) _ = FillLocalMetaAsync(track);
 
         State.LastTrackId = track.Id;
+        SaveOnlineQueue(track);
         StateService.Instance.RequestSave();
 
         AudioEngineService.Instance.SetTrackReplayGain(track.ReplayGainDb, track.ReplayPeak);
@@ -583,6 +596,36 @@ public sealed partial class MainWindow : Window
     }
 
     private int _playSeq;
+
+    private const int MaxSavedOnlineQueue = 1000;
+    private List<TrackItem>? _savedOnlineQueue;
+
+    /// <summary>
+    /// 云端曲目不在曲库里，重启后无法按 LastTrackId 找回：把当前云端队列存成快照。
+    /// 队列没变时不重复生成；播放本地曲目后清空。
+    /// </summary>
+    private void SaveOnlineQueue(TrackItem track)
+    {
+        if (!track.IsOnline)
+        {
+            _savedOnlineQueue = null;
+            if (State.LastOnlineQueue.Count > 0) State.LastOnlineQueue = new();
+            return;
+        }
+        var queue = LeftNavPane.Queue;
+        if (ReferenceEquals(queue, _savedOnlineQueue) && queue.Contains(track)) return;
+
+        var online = queue.Where(t => t.IsOnline).ToList();
+        int i = online.IndexOf(track);
+        if (i < 0) { online = new List<TrackItem> { track }; i = 0; }
+        if (online.Count > MaxSavedOnlineQueue)
+        {
+            int start = Math.Clamp(i - MaxSavedOnlineQueue / 2, 0, online.Count - MaxSavedOnlineQueue);
+            online = online.GetRange(start, MaxSavedOnlineQueue);
+        }
+        State.LastOnlineQueue = online.Select(Services.Netease.NeteaseService.ToSnapshot).ToList();
+        _savedOnlineQueue = queue.Contains(track) ? queue : null;
+    }
 
     private System.Threading.CancellationTokenSource? _waveCts;
 

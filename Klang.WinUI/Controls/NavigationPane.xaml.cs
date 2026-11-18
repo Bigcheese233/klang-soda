@@ -242,6 +242,12 @@ public sealed partial class NavigationPane : UserControl
     /// <summary>把队列重置为整个曲库（曲库被设置页改动后使用）。</summary>
     public void ResetQueue() => Queue = LibraryService.Instance.Tracks.ToList();
 
+    /// <summary>启动时恢复上次的云端队列（云端曲目不在曲库里）。</summary>
+    public void RestoreQueue(List<TrackItem> list)
+    {
+        if (list.Count > 0) Queue = list;
+    }
+
     public string CurrentTab => _currentTab;
 
     #endregion

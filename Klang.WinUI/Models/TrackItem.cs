@@ -77,7 +77,7 @@ public class TrackItem : System.ComponentModel.INotifyPropertyChanged
                 Uri? uri = null;
                 var cover = CoverPath;
                 if (!string.IsNullOrEmpty(cover) && File.Exists(cover)) uri = new Uri(cover);
-                else if (!string.IsNullOrEmpty(CoverUrl))
+                else if (Klang_WinUI.Services.NetGuard.IsNeteaseUrl(CoverUrl))
                     uri = new Uri(CoverUrl.Contains('?') ? CoverUrl : CoverUrl + "?param=96y96");
                 return uri == null ? null : new Microsoft.UI.Xaml.Media.Imaging.BitmapImage(uri) { DecodePixelWidth = 96 };
             }

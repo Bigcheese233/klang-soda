@@ -202,10 +202,10 @@ public sealed partial class CloudPanel : UserControl
     {
         CookieLoginBtn.IsEnabled = false;
         CookieStatusText.Text = L.T("正在验证…");
-        var (ok, msg) = await Svc.LoginWithCookieAsync(CookieBox.Text);
+        var (ok, msg) = await Svc.LoginWithCookieAsync(CookieBox.Password);
         CookieStatusText.Text = msg;
         CookieLoginBtn.IsEnabled = true;
-        if (ok) CookieBox.Text = "";
+        if (ok) CookieBox.Password = "";
     }
 
     private void Logout_Click(object sender, RoutedEventArgs e)

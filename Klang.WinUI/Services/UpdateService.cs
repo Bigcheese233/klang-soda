@@ -66,10 +66,20 @@ public static class UpdateService
         return true;
     }
 
-    /// <summary>只允许打开本项目 GitHub 下的链接，防止发布内容里夹带别的地址。</summary>
-    public static bool IsTrustedUrl(string? url) =>
-        url != null && url.StartsWith("https://github.com/" + Repo + "/", StringComparison.OrdinalIgnoreCase)
-        || url == RepoUrl;
+    /// <summary>
+    /// 只允许打开本项目 GitHub 下的链接，防止发布内容里夹带别的地址。
+    /// 按解析后的主机和路径判断（Uri 会先折叠 “../”），不能只比较字符串前缀。
+    /// </summary>
+    public static bool IsTrustedUrl(string? url)
+    {
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri)) return false;
+        if (uri.Scheme != Uri.UriSchemeHttps || !uri.IsDefaultPort || !string.IsNullOrEmpty(uri.UserInfo)) return false;
+        if (!uri.Host.Equals("github.com", StringComparison.OrdinalIgnoreCase)) return false;
+        var prefix = "/" + Repo;
+        var path = uri.AbsolutePath;
+        return path.Equals(prefix, StringComparison.OrdinalIgnoreCase)
+            || path.StartsWith(prefix + "/", StringComparison.OrdinalIgnoreCase);
+    }
 
     public static async Task<UpdateInfo> CheckAsync(CancellationToken ct = default)
     {

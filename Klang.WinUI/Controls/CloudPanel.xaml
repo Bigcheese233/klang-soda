@@ -89,12 +89,10 @@
                                 TextWrapping="Wrap" />
                         </Expander.Header>
                         <StackPanel Spacing="8">
-                            <TextBox
+                            <!-- Cookie 是登录凭据：用密码框，不在屏幕上明文显示 -->
+                            <PasswordBox
                                 x:Name="CookieBox"
-                                AcceptsReturn="True"
-                                Height="64"
-                                PlaceholderText="粘贴 MUSIC_U 或整段 Cookie"
-                                TextWrapping="Wrap" />
+                                PlaceholderText="粘贴 MUSIC_U 或整段 Cookie" />
                             <Button
                                 x:Name="CookieLoginBtn"
                                 Click="CookieLogin_Click"

@@ -342,27 +342,54 @@ public sealed class NeteaseService
             var album = s["al"] ?? s["album"];
             double ms = (double?)(s["dt"] ?? s["duration"]) ?? 0;
 
-            var t = new TrackItem
-            {
-                Index = index++,
-                Id = "netease_" + id,
-                NeteaseId = id,
-                Title = (string?)s["name"] ?? L.T("未知曲目"),
-                Artist = artist.Length > 0 ? artist : "未知歌手",
-                Album = (string?)album?["name"] ?? "",
-                Duration = ms / 1000.0,
-                CoverUrl = (string?)album?["picUrl"] ?? (string?)s["picUrl"] ?? "",
-                FormatBadge = L.T("云端")
-            };
-            var cached = FindCachedAudio(id);
-            if (cached != null)
-            {
-                t.FilePath = cached;
-                t.FormatBadge = L.T("已缓存");
-            }
-            var cover = CachedCoverPath(id);
-            t.CoverPath = File.Exists(cover) ? cover : null;
-            tracks.Add(t);
+            tracks.Add(MakeTrack(index++, id, (string?)s["name"] ?? L.T("未知曲目"),
+                artist.Length > 0 ? artist : "未知歌手", (string?)album?["name"] ?? "", ms / 1000.0,
+                (string?)album?["picUrl"] ?? (string?)s["picUrl"] ?? ""));
+        }
+        return tracks;
+    }
+
+    private TrackItem MakeTrack(int index, string id, string title, string artist, string album, double duration, string coverUrl)
+    {
+        var t = new TrackItem
+        {
+            Index = index,
+            Id = "netease_" + id,
+            NeteaseId = id,
+            Title = title,
+            Artist = artist,
+            Album = album,
+            Duration = duration,
+            CoverUrl = coverUrl,
+            FormatBadge = L.T("云端")
+        };
+        var cached = FindCachedAudio(id);
+        if (cached != null)
+        {
+            t.FilePath = cached;
+            t.FormatBadge = L.T("已缓存");
+        }
+        var cover = CachedCoverPath(id);
+        t.CoverPath = File.Exists(cover) ? cover : null;
+        return t;
+    }
+
+    /// <summary>把云端曲目存成快照（重启后恢复上次播放用）。</summary>
+    public static OnlineTrackSnapshot ToSnapshot(TrackItem t) => new()
+    {
+        NeteaseId = t.NeteaseId, Title = t.Title, Artist = t.Artist,
+        Album = t.Album, Duration = t.Duration, CoverUrl = t.CoverUrl
+    };
+
+    /// <summary>从快照还原云端曲目；快照里的 id 不是纯数字时跳过。</summary>
+    public List<TrackItem> FromSnapshots(IEnumerable<OnlineTrackSnapshot> list)
+    {
+        var tracks = new List<TrackItem>();
+        int index = 1;
+        foreach (var s in list)
+        {
+            if (!long.TryParse(s.NeteaseId, System.Globalization.NumberStyles.None, null, out var n) || n == 0) continue;
+            tracks.Add(MakeTrack(index++, s.NeteaseId, s.Title, s.Artist, s.Album, s.Duration, s.CoverUrl));
         }
         return tracks;
     }
@@ -408,11 +435,15 @@ public sealed class NeteaseService
                     ["encodeType"] = "aac"
                 }, ct);
                 var item = res?["data"]?.AsArray().FirstOrDefault();
-                var url = (string?)item?["url"] ?? "";
-                if ((int?)res?["code"] == 200 && url.Contains("http"))
+                var url = (string?)item?["url"] ?? "";                // 地址只认网易云的域名；类型和音质会拼进缓存文件名，只接受白名单里的值
+                if ((int?)res?["code"] == 200 && NetGuard.IsNeteaseUrl(url)
+                    && NetGuard.NormalizeAudioType((string?)item?["type"], url) is { } type)
                 {
-                    return (url, ((string?)item?["type"] ?? "mp3").ToLowerInvariant(),
-                        (int?)item?["br"] ?? 0, (string?)item?["level"] ?? lvl);
+                    // 接口还会返回 jyeffect、sky 等不在列表里的音质名，只要求是短的小写字母 / 数字
+                    var level = (string?)item?["level"];
+                    if (level == null || level.Length is 0 or > 16 || !level.All(ch => ch is >= 'a' and <= 'z' or >= '0' and <= '9'))
+                        level = lvl;
+                    return (url, type, (int?)item?["br"] ?? 0, level);
                 }
             }
             catch (OperationCanceledException) { throw; }
@@ -480,12 +511,14 @@ public sealed class NeteaseService
     private async Task<bool> ResolveCoreAsync(TrackItem track, CancellationToken ct)
     {
         var id = track.NeteaseId;
+        // id 会拼进缓存文件名，只接受纯数字（也可能来自保存的状态文件）
+        if (!long.TryParse(id, System.Globalization.NumberStyles.None, null, out _)) return false;
 
         // 封面先行（失败不影响播放）
         _ = CacheCoverAsync(track);
 
         string quality = PreferredQuality;
-        foreach (var ext in new[] { "flac", "m4a", "mp3", "ogg" })
+        foreach (var ext in NetGuard.AudioExtensions)
         {
             var p = Path.Combine(_cacheDir, $"{id}_{quality}.{ext}");
             if (File.Exists(p) && new FileInfo(p).Length > 10240)
@@ -516,6 +549,8 @@ public sealed class NeteaseService
             using var dl = new HttpClient { Timeout = TimeSpan.FromMinutes(5) };
             using var rsp = await dl.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct);
             if (!rsp.IsSuccessStatusCode) return false;
+            // 跟随重定向后也必须还在网易云的域名下
+            if (!NetGuard.IsNeteaseUri(rsp.RequestMessage?.RequestUri)) return false;
             long? expected = rsp.Content.Headers.ContentLength;
             long written = 0;
             await using (var src = await rsp.Content.ReadAsStreamAsync(ct))
@@ -572,7 +607,7 @@ public sealed class NeteaseService
                 track.CoverPath = p;
                 return;
             }
-            if (string.IsNullOrEmpty(track.CoverUrl)) return;
+            if (!NetGuard.IsNeteaseUrl(track.CoverUrl)) return;
             var url = track.CoverUrl.Contains('?') ? track.CoverUrl : track.CoverUrl + "?param=400y400";
             var bytes = await _client.Http.GetByteArrayAsync(url);
             if (bytes.Length <= 1024) return;
