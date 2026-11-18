@@ -112,7 +112,7 @@ public class AppState
     public bool ShowVinylDisc { get; set; } = false;        // 播放时封面后面滑出旋转的黑胶唱片
     public bool WaveformSeekBar { get; set; } = false;      // 底栏进度条显示振幅波形（关 = 标准滑块）
     public bool AmbientTimeOfDay { get; set; } = false;     // 沉浸背景随时段变化（深夜更暗更慢、傍晚偏暖），只用本机时间
-    public bool AmbientWeather { get; set; } = false;       // 沉浸背景叠加天气效果（雨痕 / 雪 / 阴天），需要联网
+    public bool AmbientWeather { get; set; } = false;       // 沉浸背景叠加天气效果（雨痕 / 雪 / 阴天 / 闪电 / 雾），需要联网
     public string WeatherCity { get; set; } = "";           // 显示用的城市名
     public double? WeatherLat { get; set; }
     public double? WeatherLon { get; set; }

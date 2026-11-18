@@ -16,9 +16,11 @@ public static class AmbienceService
         float Saturation,  // 饱和度倍数
         float Rain,        // 0 ~ 1：玻璃上的水珠
         float Snow,        // 0 ~ 1：飘落的雪
-        float Overcast)    // 0 ~ 1：阴天，降低饱和度
+        float Overcast,    // 0 ~ 1：阴天，降低饱和度
+        float Thunder,     // 0 ~ 1：雷暴，越强闪电越频繁
+        float Fog)         // 0 ~ 1：雾，画面蒙上缓慢飘动的薄雾
     {
-        public static readonly Ambience Neutral = new(0, 1, 1, 1, 0, 0, 0);
+        public static readonly Ambience Neutral = new(0, 1, 1, 1, 0, 0, 0, 0, 0);
     }
 
     // 一天中的关键时刻（小时）→ 色温 / 亮度 / 速度 / 饱和度；之间平滑插值
@@ -50,14 +52,14 @@ public static class AmbienceService
         return (0, 1, 1, 1);
     }
 
-    // 测试用：环境变量 KLANG_AMBIENCE="hour=23;rain=1;snow=0;overcast=0.5" 覆盖实际时间和天气
-    private static readonly (float? Hour, float? Rain, float? Snow, float? Overcast) Override = ParseOverride();
+    // 测试用：环境变量 KLANG_AMBIENCE="hour=23;rain=1;snow=0;overcast=0.5;thunder=1;fog=0" 覆盖实际时间和天气
+    private static readonly (float? Hour, float? Rain, float? Snow, float? Overcast, float? Thunder, float? Fog) Override = ParseOverride();
 
-    private static (float?, float?, float?, float?) ParseOverride()
+    private static (float?, float?, float?, float?, float?, float?) ParseOverride()
     {
-        float? h = null, r = null, s = null, o = null;
+        float? h = null, r = null, s = null, o = null, th = null, f = null;
         var env = Environment.GetEnvironmentVariable("KLANG_AMBIENCE");
-        if (string.IsNullOrWhiteSpace(env)) return (h, r, s, o);
+        if (string.IsNullOrWhiteSpace(env)) return (h, r, s, o, th, f);
         foreach (var part in env.Split(';', StringSplitOptions.RemoveEmptyEntries))
         {
             var kv = part.Split('=', 2);
@@ -68,12 +70,15 @@ public static class AmbienceService
                 case "rain": r = v; break;
                 case "snow": s = v; break;
                 case "overcast": o = v; break;
+                case "thunder": th = v; break;
+                case "fog": f = v; break;
             }
         }
-        return (h, r, s, o);
+        return (h, r, s, o, th, f);
     }
 
-    public static bool HasOverride => Override.Hour != null || Override.Rain != null || Override.Snow != null || Override.Overcast != null;
+    public static bool HasOverride => Override.Hour != null || Override.Rain != null || Override.Snow != null || Override.Overcast != null
+                                      || Override.Thunder != null || Override.Fog != null;
 
     /// <summary>当前的目标氛围（每帧调用，开销很小）。</summary>
     public static Ambience Current
@@ -89,18 +94,21 @@ public static class AmbienceService
                 (warm, bright, speed, sat) = ForHour(Math.Clamp(hour, 0f, 24f));
             }
 
-            float rain = 0, snow = 0, overcast = 0;
+            float rain = 0, snow = 0, overcast = 0, thunder = 0, fog = 0;
             if (st.AmbientWeather)
             {
                 var w = WeatherService.Instance.Latest;
-                if (w != null) { rain = w.Rain; snow = w.Snow; overcast = w.Overcast; }
+                if (w != null) { rain = w.Rain; snow = w.Snow; overcast = w.Overcast; thunder = w.Thunder; fog = w.Fog; }
             }
             rain = Override.Rain ?? rain;
             snow = Override.Snow ?? snow;
             overcast = Override.Overcast ?? overcast;
+            thunder = Override.Thunder ?? thunder;
+            fog = Override.Fog ?? fog;
 
             return new Ambience(warm, bright, speed, sat,
-                Math.Clamp(rain, 0f, 1f), Math.Clamp(snow, 0f, 1f), Math.Clamp(overcast, 0f, 1f));
+                Math.Clamp(rain, 0f, 1f), Math.Clamp(snow, 0f, 1f), Math.Clamp(overcast, 0f, 1f),
+                Math.Clamp(thunder, 0f, 1f), Math.Clamp(fog, 0f, 1f));
         }
     }
 }

@@ -23,7 +23,8 @@ internal readonly partial struct FluidShader(
     float3 colorBase,
     float clock,                                 // 真实时间（秒）：雨雪按它运动，不受时段的流动速度影响
     float4 tone,                                 // x = 色温（正暖负冷），y = 亮度，z = 饱和度
-    float4 weather,                              // x = 雨，y = 雪，z = 阴天
+    float4 weather,                              // x = 雨，y = 雪，z = 阴天，w = 雾
+    float4 storm,                                // x = 这一帧的闪电亮度，y = 闪电的水平位置，z = 雷暴强度
     // ---- 雨水（Codrops RainEffect 的水面图，见 RainSimulation）----
     ReadWriteTexture2D<Rgba32, float4> rainDrizzle,   // 雾珠层（模拟像素，屏幕高 1080）
     ReadOnlyBuffer<float4> rainRects,                // 大水珠贴图位置：左上 x、y，宽、高（模拟像素）
@@ -243,8 +244,22 @@ internal readonly partial struct FluidShader(
         float l2 = Hlsl.Dot(col, new float3(0.299f, 0.587f, 0.114f));
         col = Hlsl.Max(Hlsl.Lerp(new float3(l2, l2, l2), col, sat), new float3(0.0f, 0.0f, 0.0f));
         col *= new float3(1.0f + 0.20f * tone.X, 1.0f + 0.04f * tone.X, 1.0f - 0.22f * tone.X);
-        col *= tone.Y * (1.0f - weather.Z * 0.08f);
+        col *= tone.Y * (1.0f - weather.Z * 0.08f) * (1.0f - storm.Z * 0.10f);   // 雷暴天更暗一些，闪电才显得亮
         col = Hlsl.Lerp(col, new float3(l2 * 0.95f, l2 * 0.98f, l2 * 1.05f), weather.Z * 0.15f);
+
+        // 雾：两层不同尺度、不同方向缓慢飘动的雾团，越往下越浓；雾把画面的对比和颜色都冲淡
+        if (weather.W > 0.001f)
+        {
+            float2 fq = q * 1.3f;
+            float n1 = Noise(fq + new float2(clock * 0.018f, 0.0f));
+            float n2 = Noise(fq * 2.3f + new float2(4.7f - clock * 0.031f, 1.9f + clock * 0.006f));
+            float drift = Hlsl.SmoothStep(0.25f, 0.85f, 0.5f + 0.60f * n1 + 0.35f * n2);
+            float ground = Hlsl.SmoothStep(0.95f, 0.05f, uv.Y);
+            float dens = Hlsl.Saturate(weather.W * (0.14f + 0.42f * drift + 0.20f * ground));
+            float lfog = Hlsl.Dot(col, new float3(0.299f, 0.587f, 0.114f));
+            float3 fogCol = new float3(lfog, lfog, lfog) * 0.55f + new float3(0.20f, 0.21f, 0.23f) * tone.Y;
+            col = Hlsl.Lerp(col, fogCol, dens);
+        }
 
         // 雨天的玻璃：没有水的地方蒙着一层淡淡的雾（越往上越浓）；水珠和擦过的水路里是清楚的景色
         if (weather.X > 0.001f)
@@ -261,6 +276,17 @@ internal readonly partial struct FluidShader(
             flake = Hlsl.Max(flake, Snow(q, clock, 14.0f, 0.028f, 7.0f, 0.15f) * 0.35f);
             flake = Hlsl.Max(flake, Snow(q, clock, 5.0f, 0.060f, 13.0f, 0.07f) * 0.70f);
             col = Hlsl.Lerp(col, new float3(0.90f, 0.93f, 0.97f), flake * weather.Y * 0.5f);
+        }
+
+        // 闪电：远处云层里的一次闪光，从画面上方某个位置照亮整个场景（不画闪电本身）。
+        // 有雾时光被散射得更均匀
+        if (storm.X > 0.001f)
+        {
+            float2 d = p - new float2(storm.Y, 0.75f);
+            float spread = 1.2f - weather.W * 0.7f;
+            float glow = 0.35f + 0.65f * Hlsl.Exp(-Hlsl.Dot(d, d) * spread);
+            float f = storm.X * glow;
+            col = col * (1.0f + f * 0.55f) + new float3(0.16f, 0.18f, 0.24f) * f;
         }
 
         // 很弱的边缘收暗

@@ -250,7 +250,7 @@
     "随时段变化": "Follow time of day",
     "按当前时间调整背景的色温、亮度和流动速度：深夜更暗、更慢，傍晚偏暖。只使用本机时间，不联网。": "Adjusts the background colour temperature, brightness and motion to the time of day: darker and slower late at night, warmer in the evening. Uses only the local clock; no network access.",
     "天气效果": "Weather effects",
-    "按所在城市的天气，在背景上叠加很淡的效果：下雨时玻璃蒙上一层雾气、布满水珠，不时有水珠滑落并擦出一道水路，下雪时有稀疏的雪花，阴天降低饱和度。": "Adds a faint layer based on the weather in your city: misted glass covered in droplets when it rains, with drops sliding down and wiping clear trails, sparse snowflakes when it snows, and lower saturation when overcast.",
+    "按所在城市的天气，在背景上叠加很淡的效果：下雨时玻璃蒙上一层雾气、布满水珠，不时有水珠滑落并擦出一道水路，下雪时有稀疏的雪花，雷雨时远处偶尔有闪电，起雾时画面蒙上缓慢飘动的薄雾，阴天降低饱和度。": "Adds a faint layer based on the weather in your city: misted glass covered in droplets when it rains, with drops sliding down and wiping clear trails, sparse snowflakes when it snows, occasional distant lightning during thunderstorms, slowly drifting mist in fog, and lower saturation when overcast.",
     "输入城市名称，如 北京、Copenhagen": "Enter a city, e.g. Beijing, Copenhagen",
     "查找": "Search",
     "选择城市": "Choose a city",
