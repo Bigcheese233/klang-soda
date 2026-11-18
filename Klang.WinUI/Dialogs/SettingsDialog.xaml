@@ -562,6 +562,24 @@
 
                     <TextBlock Style="{StaticResource GroupTitle}" Text="云端音乐" />
                     <Border Style="{StaticResource SettingCard}">
+                        <Grid ColumnSpacing="12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Spacing="2">
+                                <TextBlock FontWeight="Medium" Text="动态封面" />
+                                <TextBlock FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="网易云歌曲带有动态封面时，在封面位置静音循环播放，随音乐暂停。需要登录网易云，视频会缓存到本地。" TextWrapping="Wrap" />
+                            </StackPanel>
+                            <ToggleSwitch
+                                x:Name="DynamicCoverSwitch"
+                                Grid.Column="1"
+                                OffContent="关"
+                                OnContent="开"
+                                Toggled="DynamicCoverSwitch_Toggled" />
+                        </Grid>
+                    </Border>
+                    <Border Style="{StaticResource SettingCard}">
                         <StackPanel Spacing="8">
                             <TextBlock FontWeight="Medium" Text="音乐缓存" />
                             <TextBlock

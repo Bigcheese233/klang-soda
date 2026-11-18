@@ -58,6 +58,7 @@ public sealed partial class SettingsDialog : ContentDialog
         Closed += (s, e) => WeatherService.Instance.Updated -= OnWeatherUpdated;
         LyricWordMotionSwitch.IsOn = State.LyricWordMotion;
         AutoMetaSwitch.IsOn = State.AutoFetchMetadata;
+        DynamicCoverSwitch.IsOn = State.DynamicCover;
         SelectByTag(CacheLimitBox, State.NeteaseCacheLimitMb.ToString(), "2048");
         RefreshCacheInfo();
 
@@ -126,6 +127,17 @@ public sealed partial class SettingsDialog : ContentDialog
         State.ShowVinylDisc = VinylDiscSwitch.IsOn;
         StateService.Instance.RequestSave();
         Controls.VinylCoverCard.NotifyVinylDiscSettingChanged();
+    }
+
+    /// <summary>“动态封面”开关改动后触发（主窗口据此为当前歌曲加载或移除动态封面）。</summary>
+    public static event Action? DynamicCoverSettingChanged;
+
+    private void DynamicCoverSwitch_Toggled(object sender, RoutedEventArgs e)
+    {
+        if (_loading) return;
+        State.DynamicCover = DynamicCoverSwitch.IsOn;
+        StateService.Instance.RequestSave();
+        DynamicCoverSettingChanged?.Invoke();
     }
 
     #region 沉浸背景氛围

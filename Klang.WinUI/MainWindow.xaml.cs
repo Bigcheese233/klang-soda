@@ -154,6 +154,7 @@ public sealed partial class MainWindow : Window
             ImmersiveLayer.SetPlaying(isPlaying);
             GalleryLayer.SetIsPlaying(isPlaying);
             StageCoverCard.SetPlaying(isPlaying);
+            ApplyDynamicCover();
             _taskbarPlayerWindow?.UpdatePlayState(isPlaying);
             _media.SetPlaybackState(isPlaying, _currentTrack != null);
         };
@@ -209,7 +210,7 @@ public sealed partial class MainWindow : Window
 
         LeftNavPane.TrackRemoved += (s, track) =>
         {
-            if (_currentTrack == track) { track.IsCurrent = false; _currentTrack = null; }
+            if (_currentTrack == track) { track.IsCurrent = false; _currentTrack = null; LoadDynamicCover(null); }
             _taskbarPlayerWindow?.UpdateTrack(_currentTrack);
         };
 
@@ -355,7 +356,18 @@ public sealed partial class MainWindow : Window
     {
         try
         {
-            foreach (var src in Services.Cloud.CloudSources.All) _ = src.VerifyLoginAsync();
+            Dialogs.SettingsDialog.DynamicCoverSettingChanged += () => LoadDynamicCover(_currentTrack);
+            foreach (var src in Services.Cloud.CloudSources.All)
+            {
+                // 登录状态确认后（启动时恢复的云端歌曲常常早于这一步），补取当前歌曲的动态封面
+                var s = src;
+                s.LoginChanged += () => DispatcherQueue.SafeEnqueue(() =>
+                {
+                    if (_currentTrack is { IsOnline: true } t && _dynCoverPath == null
+                        && Services.Cloud.CloudSources.For(t) == s) LoadDynamicCover(t);
+                });
+                _ = s.VerifyLoginAsync();
+            }
             await LibraryService.Instance.RestoreFromStateAsync();
             LeftNavPane.ReloadFromLibrary();
             MetadataService.Instance.Enqueue(LibraryService.Instance.Tracks);
@@ -549,6 +561,7 @@ public sealed partial class MainWindow : Window
         track.IsCurrent = true;
 
         StageCoverCard.UpdateTrack(track);
+        LoadDynamicCover(track);
         UpdateNarrowHeader(track);
         // CUE 分轨暂不加载整轨歌词（整轨 .lrc 与分轨时间轴不一致）
         StageLyricsControl.CalibrationMode = false;
@@ -770,6 +783,43 @@ public sealed partial class MainWindow : Window
             if (_currentTrack == track) BottomTransportBar.UpdateLyricSnippet(L.T("云端播放失败：") + ex.Message);
         }
     }
+
+    #region 动态封面
+
+    private string? _dynCoverPath;
+    private System.Threading.CancellationTokenSource? _dynCoverCts;
+
+    /// <summary>换歌时取这首歌的动态封面（目前只有网易云，需要登录）；取到后盖在静态封面上播放。</summary>
+    private async void LoadDynamicCover(TrackItem? track)
+    {
+        _dynCoverCts?.Cancel();
+        _dynCoverCts = null;
+        _dynCoverPath = null;
+        ApplyDynamicCover();
+        if (track == null || !track.IsOnline || !State.DynamicCover) return;
+        var source = Services.Cloud.CloudSources.For(track);
+        if (source == null) return;
+
+        var cts = _dynCoverCts = new System.Threading.CancellationTokenSource();
+        string? path = null;
+        try { path = await source.GetDynamicCoverAsync(track.CloudId, cts.Token); }
+        catch (OperationCanceledException) { return; }
+        catch (Exception ex) { App.LogError("DynamicCover", ex.Message); }
+        if (cts.IsCancellationRequested || _currentTrack != track || path == null) return;
+        _dynCoverPath = path;
+        ApplyDynamicCover();
+    }
+
+    /// <summary>动态封面只在当前看得到的那个封面上播放：沉浸模式打开时在沉浸界面，否则在主界面；随音乐暂停。</summary>
+    private void ApplyDynamicCover()
+    {
+        bool playing = AudioEngineService.Instance.IsPlaying;
+        bool immersive = ImmersiveLayer.IsOpen;
+        StageCoverCard.SetDynamicCover(immersive ? null : _dynCoverPath, playing);
+        ImmersiveLayer.SetDynamicCover(immersive ? _dynCoverPath : null, playing);
+    }
+
+    #endregion
 
     /// <summary>云端封面缓存完成后刷新各处封面。</summary>
     private void RefreshTrackCover(TrackItem track)
@@ -1692,6 +1742,7 @@ public sealed partial class MainWindow : Window
         ImmersiveLayer.SubMode = State.LyricSubMode;
         ImmersiveLayer.Open();
         SyncImmersive();
+        ApplyDynamicCover();
         if (AppWindow.Presenter.Kind != AppWindowPresenterKind.FullScreen)
         {
             EnterFullscreen();
@@ -1709,6 +1760,7 @@ public sealed partial class MainWindow : Window
         bool fly = ImmersiveLayer.IsOpen && StageCoverVisible && PrepareCoverAnimation("fromImmersive", ImmersiveLayer.CoverTarget);
 
         ImmersiveLayer.Close();
+        ApplyDynamicCover();
         if (_immersiveSetFullscreen)
         {
             ExitFullscreen();

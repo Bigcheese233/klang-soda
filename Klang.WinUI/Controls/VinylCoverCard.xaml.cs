@@ -455,6 +455,9 @@ public sealed partial class VinylCoverCard : UserControl
         }
     }
 
+    /// <summary>动态封面：本地视频路径（没有时为 null）和音乐是否在播放。</summary>
+    public void SetDynamicCover(string? path, bool playing) => DynamicCover.Set(path, playing);
+
     /// <summary>封面所在的元素：列表缩略图 / 沉浸模式的封面和它之间做连贯转场。</summary>
     public UIElement CoverTarget => JacketCard;
 

@@ -6,6 +6,7 @@
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:canvas="using:Microsoft.Graphics.Canvas.UI.Xaml"
+    xmlns:controls="using:Klang_WinUI.Controls"
     UseLayoutRounding="True"
     mc:Ignorable="d">
 
@@ -98,6 +99,8 @@
                                     x:Name="CoverImage"
                                     Stretch="UniformToFill" HorizontalAlignment="Center" VerticalAlignment="Center"
                                     Visibility="Collapsed" />
+                                <!-- 动态封面（网易云）：视频出画面后盖在静态封面上 -->
+                                <controls:DynamicCoverView x:Name="DynamicCover" ClipRadius="13" />
                                 <!-- 切歌时盖在上面的旧封面，淡出后隐藏 -->
                                 <Image
                                     x:Name="OldCoverImage"

@@ -641,6 +641,8 @@
     "请求过于频繁，请稍后再试": "Too many requests, please try again later",
     "登录失败（{0}）": "Sign-in failed ({0})",
     "云端音乐": "Cloud music",
+    "动态封面": "Animated covers",
+    "网易云歌曲带有动态封面时，在封面位置静音循环播放，随音乐暂停。需要登录网易云，视频会缓存到本地。": "When a NetEase Cloud Music song has an animated cover, it loops silently in place of the cover and pauses with the music. Requires a NetEase login; videos are cached locally.",
     "缓存上限（每个平台）": "Cache limit (per platform)"
   }
 }

@@ -629,6 +629,73 @@ public sealed class NeteaseService : ICloudSource
     /// <summary>封面下载完成（可能在后台线程触发）。</summary>
     public event Action<TrackItem>? CoverCached;
 
+    #region 动态封面
+
+    private const long MaxDynamicCoverBytes = 40L * 1024 * 1024;
+    // 本次运行中确认过没有动态封面的歌曲，不再重复请求
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, byte> _noDynamicCover = new();
+
+    /// <summary>网易云的动态封面（需要登录）：取到视频地址后下载到缓存，返回本地 mp4 路径。</summary>
+    public async Task<string?> GetDynamicCoverAsync(string cloudId, CancellationToken ct = default)
+    {
+        if (!long.TryParse(cloudId, System.Globalization.NumberStyles.None, null, out var songId) || songId == 0) return null;
+        var path = Path.Combine(_cacheDir, $"{cloudId}_dyncover.mp4");
+        try
+        {
+            if (File.Exists(path) && new FileInfo(path).Length > 10240) { Touch(path); return path; }
+        }
+        catch { }
+        if (!IsLoggedIn || _noDynamicCover.ContainsKey(cloudId)) return null;
+
+        string? url;
+        try
+        {
+            var res = await _client.WeapiAsync("/weapi/songplay/dynamic-cover", new JsonObject { ["songId"] = songId }, ct);
+            if ((int?)res?["code"] != 200) return null;   // 接口出错时不记为“没有”，下次再试
+            url = (string?)res?["data"]?["videoPlayUrl"];
+            if (!NetGuard.IsNeteaseUrl(url)) { _noDynamicCover[cloudId] = 0; return null; }
+        }
+        catch (OperationCanceledException) { throw; }
+        catch { return null; }
+
+        var tmp = path + "." + Guid.NewGuid().ToString("N")[..8] + ".tmp";
+        try
+        {
+            using var req = new HttpRequestMessage(HttpMethod.Get, url);
+            req.Headers.TryAddWithoutValidation("Referer", "https://music.163.com/");
+            using var dl = new HttpClient { Timeout = TimeSpan.FromMinutes(2) };
+            using var rsp = await dl.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct);
+            if (!rsp.IsSuccessStatusCode || !NetGuard.IsNeteaseUri(rsp.RequestMessage?.RequestUri)) return null;
+            long? expected = rsp.Content.Headers.ContentLength;
+            if (expected > MaxDynamicCoverBytes) return null;
+            long written = 0;
+            await using (var src = await rsp.Content.ReadAsStreamAsync(ct))
+            await using (var dst = new FileStream(tmp, FileMode.Create, FileAccess.Write, FileShare.None))
+            {
+                var buf = new byte[64 * 1024];
+                int n;
+                while ((n = await src.ReadAsync(buf, ct)) > 0)
+                {
+                    written += n;
+                    if (written > MaxDynamicCoverBytes) return null;
+                    await dst.WriteAsync(buf.AsMemory(0, n), ct);
+                }
+            }
+            if (written <= 10240 || (expected.HasValue && written != expected.Value)) return null;
+            File.Move(tmp, path, true);
+            EnforceCacheQuota();
+            return path;
+        }
+        catch (OperationCanceledException) { throw; }
+        catch { return null; }
+        finally
+        {
+            try { if (File.Exists(tmp)) File.Delete(tmp); } catch { }
+        }
+    }
+
+    #endregion
+
     private static void Touch(string path)
     {
         try { File.SetLastWriteTimeUtc(path, DateTime.UtcNow); } catch { }
@@ -639,7 +706,7 @@ public sealed class NeteaseService : ICloudSource
         try
         {
             var files = new DirectoryInfo(_cacheDir).EnumerateFiles().ToList();
-            return (files.Count(f => f.Extension != ".jpg"), files.Sum(f => f.Length));
+            return (files.Count(f => f.Extension is not (".jpg" or ".mp4")), files.Sum(f => f.Length));   // 数量只算音频
         }
         catch
         {
@@ -669,7 +736,7 @@ public sealed class NeteaseService : ICloudSource
         {
             long limit = Math.Max(256, State.NeteaseCacheLimitMb) * 1024L * 1024L;
             var audio = new DirectoryInfo(_cacheDir).EnumerateFiles()
-                .Where(f => f.Extension is ".flac" or ".m4a" or ".mp3" or ".ogg")
+                .Where(f => f.Extension is ".flac" or ".m4a" or ".mp3" or ".ogg" or ".mp4")   // mp4 = 动态封面
                 .OrderBy(f => f.LastWriteTimeUtc).ToList();
             long total = audio.Sum(f => f.Length);
             foreach (var f in audio)

@@ -144,6 +144,9 @@ public sealed partial class ImmersiveView : UserControl
         return t.TotalHours >= 1 ? t.ToString(@"h\:mm\:ss") : t.ToString(@"mm\:ss");
     }
 
+    /// <summary>动态封面：本地视频路径（没有时为 null）和音乐是否在播放。</summary>
+    public void SetDynamicCover(string? path, bool playing) => DynamicCover.Set(path, playing);
+
     public void SetPlaying(bool playing) => PlayIcon.Glyph = playing ? "" : "";
 
     public void UpdateProgress(double position, double total)

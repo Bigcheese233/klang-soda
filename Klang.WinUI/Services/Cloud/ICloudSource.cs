@@ -73,6 +73,9 @@ public interface ICloudSource
     Task<List<TrackItem>> SearchAsync(string keyword, int limit = 50);
     Task<LyricBundle> GetLyricsAsync(string cloudId, CancellationToken ct = default);
 
+    /// <summary>动态封面（短视频，静音循环播放），下载到缓存后返回本地路径；没有或不支持时返回 null。</summary>
+    Task<string?> GetDynamicCoverAsync(string cloudId, CancellationToken ct = default) => Task.FromResult<string?>(null);
+
     #endregion
 
     #region 音源与缓存

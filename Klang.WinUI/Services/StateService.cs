@@ -161,6 +161,7 @@ public class AppState
     public string NeteaseNickname { get; set; } = "";
     public string NeteaseAvatarUrl { get; set; } = "";
     public string NeteaseQuality { get; set; } = "lossless";
+    public bool DynamicCover { get; set; } = true;          // 云端歌曲有动态封面时在封面上播放（网易云，需要登录）
     public int NeteaseCacheLimitMb { get; set; } = 2048;   // 云端缓存上限（每个来源各自计算）
 
     // QQ 音乐：登录凭证（整段登录结果）用 DPAPI 加密后保存
