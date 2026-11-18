@@ -46,10 +46,12 @@ public interface ICloudSource
     Task VerifyLoginAsync();
     void Logout();
 
+    /// <summary>扫码方式（例如 QQ / 微信）；只有一种时界面不显示切换。</summary>
+    IReadOnlyList<(string Key, string Label)> QrModes { get; }
     /// <summary>扫码登录界面上的提示，例如“用某某 App 扫码登录”。</summary>
-    string QrHint { get; }
-    /// <summary>申请登录二维码；Key 为空表示失败。</summary>
-    Task<(string Key, byte[] Png)> CreateQrAsync();
+    string QrHintFor(string mode);
+    /// <summary>申请登录二维码（PNG 或 JPEG）；Key 为空表示失败。</summary>
+    Task<(string Key, byte[] Png)> CreateQrAsync(string mode);
     Task<(QrLoginState State, string Message)> PollQrAsync(string key);
 
     /// <summary>是否支持手动粘贴 Cookie 登录。</summary>
@@ -62,8 +64,9 @@ public interface ICloudSource
 
     #region 内容
 
-    /// <summary>是否有“每日推荐”。</summary>
+    /// <summary>是否有每日推荐一类的推荐列表；标题见 <see cref="DailyRecommendTitle"/>。</summary>
     bool HasDailyRecommend { get; }
+    string DailyRecommendTitle { get; }
     Task<List<TrackItem>> GetDailyRecommendAsync();
     Task<List<CloudPlaylist>> GetUserPlaylistsAsync();
     Task<List<TrackItem>> GetPlaylistTracksAsync(string playlistId);

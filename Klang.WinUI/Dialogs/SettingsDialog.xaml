@@ -560,7 +560,7 @@
                 <StackPanel Margin="0,0,12,0" Spacing="8">
                     <TextBlock FontSize="20" FontWeight="SemiBold" Text="网络与缓存" />
 
-                    <TextBlock Style="{StaticResource GroupTitle}" Text="网易云" />
+                    <TextBlock Style="{StaticResource GroupTitle}" Text="云端音乐" />
                     <Border Style="{StaticResource SettingCard}">
                         <StackPanel Spacing="8">
                             <TextBlock FontWeight="Medium" Text="音乐缓存" />
@@ -577,7 +577,7 @@
                                     VerticalAlignment="Center"
                                     FontSize="12"
                                     Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                    Text="缓存上限" />
+                                    Text="缓存上限（每个平台）" />
                                 <ComboBox
                                     x:Name="CacheLimitBox"
                                     Grid.Column="1"

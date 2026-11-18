@@ -23,7 +23,9 @@ public sealed class NeteaseService : ICloudSource
 
     public string Key => CloudSources.NeteaseKey;
     public string DisplayName => L.T("网易云音乐");
-    public string QrHint => L.T("用网易云音乐 App 扫码登录");
+    public IReadOnlyList<(string Key, string Label)> QrModes { get; } = new[] { ("app", "") };
+    public string QrHintFor(string mode) => L.T("用网易云音乐 App 扫码登录");
+    public string DailyRecommendTitle => L.T("每日推荐");
     public bool SupportsCookieLogin => true;
     public string CookieHint => L.T("粘贴 MUSIC_U 或整段 Cookie");
     public bool HasDailyRecommend => true;
@@ -153,7 +155,7 @@ public sealed class NeteaseService : ICloudSource
     }
 
     /// <summary>申请二维码；返回 unikey 与 PNG 字节。</summary>
-    public async Task<(string Key, byte[] Png)> CreateQrAsync()
+    public async Task<(string Key, byte[] Png)> CreateQrAsync(string mode)
     {
         if (!IsLoggedIn) _client.ResetCookies();
         var res = await _client.WeapiAsync("/weapi/login/qrcode/unikey", new JsonObject { ["type"] = 1 });

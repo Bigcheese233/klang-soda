@@ -625,6 +625,22 @@
     "无法获取音源（不支持的云端来源）": "Kan ikke hente lydkilden (ikke-understøttet cloud-kilde)",
     "{0} · 这首歌的歌词": "{0} · sangtekst til dette nummer",
     "{0}提供的默认歌词": "Standardsangtekst fra {0}",
-    "云端来源": "Cloud-kilde"
+    "云端来源": "Cloud-kilde",
+    "QQ 音乐": "QQ Music",
+    "QQ 音乐用户": "QQ Music-bruger",
+    "微信": "WeChat",
+    "用手机 QQ 扫码登录": "Scan med QQ-appen for at logge ind",
+    "用微信扫码登录": "Scan med WeChat for at logge ind",
+    "不支持 Cookie 登录": "Login med cookie understøttes ikke",
+    "已在手机上取消登录": "Login blev annulleret på telefonen",
+    "雷达推荐": "Radar-forslag",
+    "高品质 320k": "Høj kvalitet 320k",
+    "登录已过期": "Login er udløbet",
+    "账号受限": "Kontoen er begrænset",
+    "登录设备数已达上限": "For mange enheder er logget ind",
+    "请求过于频繁，请稍后再试": "For mange forespørgsler, prøv igen senere",
+    "登录失败（{0}）": "Login mislykkedes ({0})",
+    "云端音乐": "Cloud-musik",
+    "缓存上限（每个平台）": "Cachegrænse (pr. platform)"
   }
 }

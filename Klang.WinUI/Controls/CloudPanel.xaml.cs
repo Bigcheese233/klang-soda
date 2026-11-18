@@ -76,7 +76,17 @@ public sealed partial class CloudPanel : UserControl
     {
         var src = Svc;
         LoginTitleText.Text = L.F("登录{0}", src.DisplayName);
-        QrStatusText.Text = src.QrHint;
+
+        _loadingQrMode = true;
+        QrModeBox.Items.Clear();
+        foreach (var (key, label) in src.QrModes)
+            QrModeBox.Items.Add(new ComboBoxItem { Content = label, Tag = key });
+        _qrMode = src.QrModes[0].Key;
+        QrModeBox.SelectedIndex = 0;
+        QrModeBox.Visibility = src.QrModes.Count > 1 ? Visibility.Visible : Visibility.Collapsed;
+        _loadingQrMode = false;
+
+        QrStatusText.Text = src.QrHintFor(_qrMode);
         CookieExpander.Visibility = src.SupportsCookieLogin ? Visibility.Visible : Visibility.Collapsed;
         CookieBox.PlaceholderText = src.CookieHint;
         CookieBox.Password = "";
@@ -89,6 +99,20 @@ public sealed partial class CloudPanel : UserControl
         QualityBox.SelectedItem = QualityBox.Items.OfType<ComboBoxItem>()
             .FirstOrDefault(i => (string)i.Tag == src.PreferredQuality);
         _loadingQuality = false;
+    }
+
+    private string _qrMode = "";
+    private bool _loadingQrMode;
+
+    private async void QrModeBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_loadingQrMode || QrModeBox.SelectedItem is not ComboBoxItem it || it.Tag is not string key || key == _qrMode) return;
+        _qrMode = key;
+        _qrTimer.Stop();
+        _qrKey = "";
+        QrImage.Source = null;
+        QrStatusText.Text = Svc.QrHintFor(_qrMode);
+        if (_active) await RefreshQrAsync();
     }
 
     private void SourceBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -168,7 +192,10 @@ public sealed partial class CloudPanel : UserControl
         QrStatusText.Text = L.T("正在获取二维码…");
         try
         {
-            var (key, png) = await Svc.CreateQrAsync();
+            var src = Svc;
+            var mode = _qrMode;
+            var (key, png) = await src.CreateQrAsync(mode);
+            if (src != Svc || mode != _qrMode) return;   // 等待期间换了来源或扫码方式
             if (key.Length == 0)
             {
                 _qrKey = "";
@@ -188,7 +215,7 @@ public sealed partial class CloudPanel : UserControl
             var bmp = new BitmapImage();
             await bmp.SetSourceAsync(stream);
             QrImage.Source = bmp;
-            QrStatusText.Text = Svc.QrHint;
+            QrStatusText.Text = Svc.QrHintFor(_qrMode);
             if (_active) _qrTimer.Start();
         }
         catch (Exception ex)
@@ -286,7 +313,7 @@ public sealed partial class CloudPanel : UserControl
             if (src != Svc) return;   // 加载期间换了来源
             _entries.Clear();
             if (src.HasDailyRecommend)
-                _entries.Add(new CloudEntry { Title = L.T("每日推荐"), Subtitle = "", Glyph = "", IsDaily = true });
+                _entries.Add(new CloudEntry { Title = src.DailyRecommendTitle, Subtitle = "", Glyph = "", IsDaily = true });
             foreach (var pl in playlists)
             {
                 _entries.Add(new CloudEntry

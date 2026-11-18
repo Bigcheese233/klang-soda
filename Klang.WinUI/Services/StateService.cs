@@ -161,7 +161,12 @@ public class AppState
     public string NeteaseNickname { get; set; } = "";
     public string NeteaseAvatarUrl { get; set; } = "";
     public string NeteaseQuality { get; set; } = "lossless";
-    public int NeteaseCacheLimitMb { get; set; } = 2048;
+    public int NeteaseCacheLimitMb { get; set; } = 2048;   // 云端缓存上限（每个来源各自计算）
+
+    // QQ 音乐：登录凭证（整段登录结果）用 DPAPI 加密后保存
+    public string QQMusicCredentialEnc { get; set; } = "";
+    public string QQMusicNickname { get; set; } = "";
+    public string QQMusicQuality { get; set; } = "lossless";
 
     public string LastTrackId { get; set; } = "";
     // 上次播放的是云端曲目时，保存当时的云端队列（含那首歌）；播放本地曲目后清空

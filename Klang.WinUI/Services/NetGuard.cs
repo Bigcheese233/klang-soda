@@ -11,6 +11,18 @@ public static class NetGuard
     /// <summary>网易云的接口和 CDN 域名（音频流、封面都在这些域名下）。</summary>
     private static readonly string[] NeteaseHosts = { "126.net", "127.net", "163.com", "netease.com" };
 
+    /// <summary>QQ 音乐的接口、音频 CDN 和封面图床域名。</summary>
+    private static readonly string[] QQMusicHosts = { "qq.com", "gtimg.cn", "qpic.cn" };
+
+    /// <summary>地址是 http / https，且主机属于 QQ 音乐（腾讯）的域名。</summary>
+    public static bool IsQQMusicUrl(string? url) =>
+        Uri.TryCreate(url, UriKind.Absolute, out var uri) && IsQQMusicUri(uri);
+
+    public static bool IsQQMusicUri(Uri? uri) =>
+        uri != null
+        && (uri.Scheme == Uri.UriSchemeHttps || uri.Scheme == Uri.UriSchemeHttp)
+        && QQMusicHosts.Any(h => HostMatches(uri.Host, h));
+
     public static readonly string[] AudioExtensions = { "flac", "m4a", "mp3", "ogg" };
 
     /// <summary>地址是 http / https，且主机属于网易云的域名。</summary>

@@ -13,6 +13,7 @@ public static class CloudSources
     private static readonly Lazy<IReadOnlyList<ICloudSource>> _all = new(() => new ICloudSource[]
     {
         Netease.NeteaseService.Instance,
+        QQMusic.QQMusicService.Instance,
     });
 
     public static IReadOnlyList<ICloudSource> All => _all.Value;

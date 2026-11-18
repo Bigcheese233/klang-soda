@@ -12,7 +12,7 @@
 
 Klang 是在用户本机运行的桌面应用。开发者不运营与本应用配套的服务器，不要求注册账号，也不在应用中集成任何使用统计、遥测或崩溃上报组件。开发者不会通过本应用收集、存储或接收用户的个人信息。
 
-本应用会在用户使用特定功能时，直接向第三方服务（网易云音乐、LRCLIB、Open-Meteo、GitHub）发起网络请求。这些请求的内容、触发条件与控制方式见第 3 节。
+本应用会在用户使用特定功能时，直接向第三方服务（网易云音乐、QQ 音乐、LRCLIB、Open-Meteo、GitHub）发起网络请求。这些请求的内容、触发条件与控制方式见第 3 节。
 
 本声明适用于 Klang 的 WinUI 3 版本（2.x）。早期的 PyQt6 版本不在本声明范围内。
 
@@ -22,9 +22,9 @@ Klang 是在用户本机运行的桌面应用。开发者不运营与本应用�
 
 | 位置 | 内容 |
 | :--- | :--- |
-| `player_state.json`（及 `.bak` 备份） | 曲库索引（文件路径、标签信息、时长、格式）、监视的文件夹、歌单与智能歌单、收藏、播放次数与最近播放时间、漫游模式的学习数据、各曲目的分析结果（声学特征、音质检测结果、BPM 与调性）、歌词时间偏移、界面与音频设置、窗口位置，以及加密后的网易云登录凭据 |
+| `player_state.json`（及 `.bak` 备份） | 曲库索引（文件路径、标签信息、时长、格式）、监视的文件夹、歌单与智能歌单、收藏、播放次数与最近播放时间、漫游模式的学习数据、各曲目的分析结果（声学特征、音质检测结果、BPM 与调性）、歌词时间偏移、界面与音频设置、窗口位置，以及加密后的网易云音乐、QQ 音乐登录凭据 |
 | `covers`、`CoversCache` | 从音频文件提取或从网络获取的封面图片 |
-| `netease_cache` | 网易云音乐曲目的缓存音频文件 |
+| `netease_cache`、`qqmusic_cache` | 网易云音乐、QQ 音乐曲目的缓存音频文件与封面 |
 | `LyricsCache` | 从 LRCLIB 获取的歌词 |
 
 说明：
@@ -39,16 +39,17 @@ Klang 是在用户本机运行的桌面应用。开发者不运营与本应用�
 | 自动补全封面、专辑、歌手 | 网易云音乐（music.163.com 及其图片服务器） | 以歌名和歌手组成的搜索关键字；匹配成功后按歌曲编号请求封面与元数据 | 设置 → 曲库 → “自动补全封面与歌词”，可关闭 |
 | 自动补全歌词 | 网易云音乐；LRCLIB（lrclib.net） | 对 LRCLIB：歌名、歌手、专辑、时长。对网易云：同上一行 | 同上；歌词菜单中的“在线搜索歌词”为手动触发 |
 | 网易云账号、云端曲库与播放 | 网易云音乐 | 登录凭据（见第 4 节）、所请求的歌单与曲目、搜索关键字 | 仅在用户登录或使用云端页面时发生 |
+| QQ 音乐账号、云端曲库与播放 | QQ 音乐（y.qq.com 及其接口、音频与图片服务器）；扫码登录时另会访问 QQ 登录（ptlogin2.qq.com、graph.qq.com）或微信开放平台（open.weixin.qq.com） | 登录凭据（见第 4 节）、所请求的歌单与曲目、搜索关键字 | 仅在用户于云端页面切换到 QQ 音乐并登录或使用时发生 |
 | 天气效果 | Open-Meteo（api.open-meteo.com、geocoding-api.open-meteo.com） | 搜索城市时：输入的城市名与界面语言。之后每 30 分钟：所选城市的经纬度（保留两位小数，约 1 千米精度） | 仅在设置 → 外观中开启“天气效果”并选择城市后发生，默认关闭；关闭后即停止请求 |
 | 检查更新 | GitHub（api.github.com） | 不含个人信息的发布列表请求 | 仅在用户于设置 → 关于中点击“检查更新”时发生，应用不会在后台自动检查 |
 | 下载新版本 | 系统默认浏览器 | 由浏览器访问 GitHub 发布页 | 仅在用户点击下载时发生 |
 
-应用发起的接口请求使用 HTTPS；封面与音频文件的下载地址由网易云音乐的接口返回，应用只接受网易云音乐域名下的地址。上述服务端会像任何网络服务一样看到请求方的 IP 地址和通用请求头；其对这些信息的处理由各服务方的隐私政策规定，开发者无法控制。
+应用发起的接口请求使用 HTTPS；封面与音频文件的下载地址由网易云音乐、QQ 音乐的接口返回，应用只接受对应平台域名下的地址。上述服务端会像任何网络服务一样看到请求方的 IP 地址和通用请求头；其对这些信息的处理由各服务方的隐私政策规定，开发者无法控制。
 
-### 4. 网易云账号与登录凭据
+### 4. 云端账号与登录凭据
 
-- 登录方式为扫码或手动粘贴 Cookie。应用不会获取或保存用户的网易云密码。
-- 登录后取得的 Cookie 使用 Windows 数据保护接口（DPAPI，当前用户作用域）加密后保存在 `player_state.json` 中，仅当前 Windows 用户账户可以解密。
+- 网易云音乐的登录方式为扫码或手动粘贴 Cookie；QQ 音乐的登录方式为 QQ 或微信扫码。应用不会获取或保存用户的网易云、QQ 或微信密码。
+- 登录后取得的凭据（网易云的 Cookie、QQ 音乐的登录令牌）使用 Windows 数据保护接口（DPAPI，当前用户作用域）加密后保存在 `player_state.json` 中，仅当前 Windows 用户账户可以解密。
 - 在设置中退出登录会清除内存与磁盘上保存的凭据。
 - 手动粘贴 Cookie 属于高权限凭据，请勿在不受信任的环境中操作，也不要将 `player_state.json` 与他人共享。
 
@@ -57,6 +58,7 @@ Klang 是在用户本机运行的桌面应用。开发者不运营与本应用�
 Klang 使用的第三方服务各自有独立的隐私政策与服务条款，使用相应功能即表示这些数据会发送给对应服务方：
 
 - 网易云音乐：<https://music.163.com>
+- QQ 音乐：<https://y.qq.com>
 - LRCLIB：<https://lrclib.net>
 - Open-Meteo：<https://open-meteo.com/en/terms>
 - GitHub：<https://docs.github.com/site-policy/privacy-policies/github-general-privacy-statement>
@@ -64,9 +66,9 @@ Klang 使用的第三方服务各自有独立的隐私政策与服务条款，�
 ### 6. 用户的控制权
 
 - 关闭“自动补全封面与歌词”后，应用不会再为本地曲目联网查找元数据与歌词。
-- 不登录网易云、不开启“天气效果”、不使用“检查更新”和“在线搜索歌词”，则应用不会产生相应的网络请求。
+- 不登录网易云音乐或 QQ 音乐、不开启“天气效果”、不使用“检查更新”和“在线搜索歌词”，则应用不会产生相应的网络请求。
 - 需要清除全部本地数据时，退出应用后删除 `%LocalAppData%\Klang` 目录即可。
-- 设置 → 网络与缓存 中可单独清理网易云音频缓存。
+- 设置 → 网络与缓存 中可单独清理云端音频缓存。
 
 ### 7. 安全
 
@@ -84,7 +86,7 @@ Klang 使用的第三方服务各自有独立的隐私政策与服务条款，�
 
 Klang is a desktop application that runs on the user's own computer. The developer does not operate any server for this application, does not require an account, and does not include usage analytics, telemetry or crash reporting. The developer does not collect, store or receive personal information from users through this application.
 
-When a user uses certain features, the application connects directly to third-party services (NetEase Cloud Music, LRCLIB, Open-Meteo and GitHub). What is sent, when, and how to control it is described in Section 3.
+When a user uses certain features, the application connects directly to third-party services (NetEase Cloud Music, QQ Music, LRCLIB, Open-Meteo and GitHub). What is sent, when, and how to control it is described in Section 3.
 
 This statement applies to the WinUI 3 version of Klang (2.x). The earlier PyQt6 version is not covered.
 
@@ -94,9 +96,9 @@ Application data is kept in `%LocalAppData%\Klang`. It is used only by the appli
 
 | Location | Contents |
 | :--- | :--- |
-| `player_state.json` (and its `.bak` backup) | Library index (file paths, tag information, duration, format), watched folders, playlists and smart playlists, favourites, play counts and last-played times, roaming-mode learning data, per-track analysis results (acoustic features, audio quality verdict, BPM and key), lyric timing offsets, interface and audio settings, window positions, and the encrypted NetEase Cloud Music credentials |
+| `player_state.json` (and its `.bak` backup) | Library index (file paths, tag information, duration, format), watched folders, playlists and smart playlists, favourites, play counts and last-played times, roaming-mode learning data, per-track analysis results (acoustic features, audio quality verdict, BPM and key), lyric timing offsets, interface and audio settings, window positions, and the encrypted NetEase Cloud Music and QQ Music credentials |
 | `covers`, `CoversCache` | Cover images extracted from audio files or downloaded from the network |
-| `netease_cache` | Cached audio files of NetEase Cloud Music tracks |
+| `netease_cache`, `qqmusic_cache` | Cached audio files and covers of NetEase Cloud Music and QQ Music tracks |
 | `LyricsCache` | Lyrics retrieved from LRCLIB |
 
 Notes:
@@ -111,16 +113,17 @@ Notes:
 | Auto-fill of covers, album and artist | NetEase Cloud Music (music.163.com and its image servers) | A search keyword made of title and artist; after a match, requests for the cover and metadata by song ID | Settings → Library → "Fill in covers and lyrics automatically"; can be turned off |
 | Auto-fill of lyrics | NetEase Cloud Music; LRCLIB (lrclib.net) | To LRCLIB: title, artist, album, duration. To NetEase: as in the row above | As above; "Search lyrics online" in the lyrics menu is triggered manually |
 | NetEase account, cloud library and playback | NetEase Cloud Music | Login credentials (see Section 4), requested playlists and tracks, search keywords | Only when the user signs in or uses the cloud page |
+| QQ Music account, cloud library and playback | QQ Music (y.qq.com and its API, audio and image servers); QR sign-in also contacts QQ login (ptlogin2.qq.com, graph.qq.com) or the WeChat Open Platform (open.weixin.qq.com) | Login credentials (see Section 4), requested playlists and tracks, search keywords | Only when the user switches the cloud page to QQ Music and signs in or uses it |
 | Weather effects | Open-Meteo (api.open-meteo.com, geocoding-api.open-meteo.com) | When searching for a city: the city name entered and the interface language. Then every 30 minutes: the latitude and longitude of the chosen city, rounded to two decimals (about 1 km) | Only after "Weather effects" is turned on in Settings → Appearance and a city is chosen; off by default; turning it off stops the requests |
 | Update check | GitHub (api.github.com) | A request for the release list, containing no personal information | Only when the user clicks "Check for updates" in Settings → About; the application does not check in the background |
 | Downloading a new version | The default web browser | The browser opens the GitHub release page | Only when the user clicks download |
 
-API requests made by the application use HTTPS; download addresses for cover images and audio files are returned by the NetEase Cloud Music API; only addresses on NetEase Cloud Music domains are accepted. As with any network service, the recipients can see the requester's IP address and standard request headers. Their handling of this information is governed by their own privacy policies, which the developer does not control.
+API requests made by the application use HTTPS; download addresses for cover images and audio files are returned by the NetEase Cloud Music and QQ Music APIs; only addresses on the respective platform's domains are accepted. As with any network service, the recipients can see the requester's IP address and standard request headers. Their handling of this information is governed by their own privacy policies, which the developer does not control.
 
-### 4. NetEase Cloud Music account and credentials
+### 4. Cloud accounts and credentials
 
-- Sign-in is by QR code or by pasting a cookie manually. The application does not obtain or store the user's NetEase password.
-- The cookie obtained after sign-in is encrypted with the Windows Data Protection API (DPAPI, current-user scope) and stored in `player_state.json`. Only the same Windows user account can decrypt it.
+- NetEase Cloud Music sign-in is by QR code or by pasting a cookie manually; QQ Music sign-in is by scanning a QR code with QQ or WeChat. The application does not obtain or store the user's NetEase, QQ or WeChat password.
+- The credentials obtained after sign-in (the NetEase cookie, the QQ Music login token) are encrypted with the Windows Data Protection API (DPAPI, current-user scope) and stored in `player_state.json`. Only the same Windows user account can decrypt it.
 - Signing out in Settings clears the credentials from memory and from disk.
 - A pasted cookie is a high-privilege credential. Do not paste it on an untrusted machine, and do not share `player_state.json` with others.
 
@@ -129,6 +132,7 @@ API requests made by the application use HTTPS; download addresses for cover ima
 The third-party services used by Klang have their own privacy policies and terms. By using the related feature, the data described above is sent to the respective provider:
 
 - NetEase Cloud Music: <https://music.163.com>
+- QQ Music: <https://y.qq.com>
 - LRCLIB: <https://lrclib.net>
 - Open-Meteo: <https://open-meteo.com/en/terms>
 - GitHub: <https://docs.github.com/site-policy/privacy-policies/github-general-privacy-statement>
@@ -136,9 +140,9 @@ The third-party services used by Klang have their own privacy policies and terms
 ### 6. User control
 
 - With "Fill in covers and lyrics automatically" turned off, the application no longer looks up metadata or lyrics online for local tracks.
-- If the user does not sign in to NetEase, does not turn on "Weather effects" and does not use "Check for updates" or "Search lyrics online", the corresponding network requests are not made.
+- If the user does not sign in to NetEase Cloud Music or QQ Music, does not turn on "Weather effects" and does not use "Check for updates" or "Search lyrics online", the corresponding network requests are not made.
 - To remove all local data, close the application and delete the `%LocalAppData%\Klang` folder.
-- The NetEase audio cache can be cleared separately under Settings → Network.
+- The cloud audio cache can be cleared separately under Settings → Network.
 
 ### 7. Security
 
@@ -156,7 +160,7 @@ This statement is updated as the application changes. The updated version is pub
 
 Klang er et skrivebordsprogram, der kører på brugerens egen computer. Udvikleren driver ingen servere til programmet, kræver ingen konto og har ikke indbygget brugsstatistik, telemetri eller fejlrapportering. Udvikleren indsamler, lagrer eller modtager ikke personoplysninger fra brugere gennem programmet.
 
-Når brugeren benytter bestemte funktioner, opretter programmet direkte forbindelse til tredjepartstjenester (NetEase Cloud Music, LRCLIB, Open-Meteo og GitHub). Hvad der sendes, hvornår, og hvordan det kan styres, er beskrevet i afsnit 3.
+Når brugeren benytter bestemte funktioner, opretter programmet direkte forbindelse til tredjepartstjenester (NetEase Cloud Music, QQ Music, LRCLIB, Open-Meteo og GitHub). Hvad der sendes, hvornår, og hvordan det kan styres, er beskrevet i afsnit 3.
 
 Denne politik gælder for WinUI 3-versionen af Klang (2.x). Den tidligere PyQt6-version er ikke omfattet.
 
@@ -166,9 +170,9 @@ Programdata gemmes i `%LocalAppData%\Klang`. De bruges kun af programmet selv og
 
 | Placering | Indhold |
 | :--- | :--- |
-| `player_state.json` (og sikkerhedskopien `.bak`) | Bibliotekets indeks (filstier, tags, varighed, format), overvågede mapper, afspilningslister og smarte afspilningslister, favoritter, antal afspilninger og seneste afspilningstidspunkt, indlæringsdata til strejftilstand, analyseresultater pr. nummer (akustiske egenskaber, lydkvalitetsvurdering, BPM og toneart), tidsforskydning af sangtekster, indstillinger for grænseflade og lyd, vinduespositioner samt de krypterede loginoplysninger til NetEase Cloud Music |
+| `player_state.json` (og sikkerhedskopien `.bak`) | Bibliotekets indeks (filstier, tags, varighed, format), overvågede mapper, afspilningslister og smarte afspilningslister, favoritter, antal afspilninger og seneste afspilningstidspunkt, indlæringsdata til strejftilstand, analyseresultater pr. nummer (akustiske egenskaber, lydkvalitetsvurdering, BPM og toneart), tidsforskydning af sangtekster, indstillinger for grænseflade og lyd, vinduespositioner samt de krypterede loginoplysninger til NetEase Cloud Music og QQ Music |
 | `covers`, `CoversCache` | Coverbilleder udtrukket fra lydfiler eller hentet fra internettet |
-| `netease_cache` | Cachede lydfiler fra NetEase Cloud Music |
+| `netease_cache`, `qqmusic_cache` | Cachede lydfiler og coverbilleder fra NetEase Cloud Music og QQ Music |
 | `LyricsCache` | Sangtekster hentet fra LRCLIB |
 
 Bemærkninger:
@@ -183,16 +187,17 @@ Bemærkninger:
 | Automatisk udfyldning af cover, album og kunstner | NetEase Cloud Music (music.163.com og dets billedservere) | Et søgeord bestående af titel og kunstner; ved match forespørges cover og metadata via sang-id | Indstillinger → Bibliotek → "Udfyld cover og tekster automatisk"; kan slås fra |
 | Automatisk udfyldning af sangtekster | NetEase Cloud Music; LRCLIB (lrclib.net) | Til LRCLIB: titel, kunstner, album, varighed. Til NetEase: som i rækken ovenfor | Som ovenfor; "Søg sangtekst online" i tekstmenuen udløses manuelt |
 | NetEase-konto, cloud-bibliotek og afspilning | NetEase Cloud Music | Loginoplysninger (se afsnit 4), forespurgte afspilningslister og numre, søgeord | Kun når brugeren logger ind eller bruger cloud-siden |
+| QQ Music-konto, cloud-bibliotek og afspilning | QQ Music (y.qq.com og dets API-, lyd- og billedservere); ved login med QR-kode kontaktes også QQ-login (ptlogin2.qq.com, graph.qq.com) eller WeChat Open Platform (open.weixin.qq.com) | Loginoplysninger (se afsnit 4), forespurgte afspilningslister og numre, søgeord | Kun når brugeren skifter cloud-siden til QQ Music og logger ind eller bruger den |
 | Vejreffekter | Open-Meteo (api.open-meteo.com, geocoding-api.open-meteo.com) | Ved søgning efter by: det indtastede bynavn og grænsefladens sprog. Derefter hvert 30. minut: den valgte bys bredde- og længdegrad, afrundet til to decimaler (ca. 1 km) | Kun når "Vejreffekter" er slået til under Indstillinger → Udseende, og en by er valgt; slået fra som standard; når den slås fra, stopper forespørgslerne |
 | Søgning efter opdateringer | GitHub (api.github.com) | En forespørgsel om udgivelsesliste uden personoplysninger | Kun når brugeren klikker "Søg efter opdateringer" under Indstillinger → Om; programmet søger ikke i baggrunden |
 | Download af ny version | Standardbrowseren | Browseren åbner udgivelsessiden på GitHub | Kun når brugeren klikker på download |
 
-Programmets API-forespørgsler bruger HTTPS; downloadadresser til coverbilleder og lydfiler returneres af NetEase Cloud Music; kun adresser på NetEase Cloud Musics domæner accepteres. Som ved enhver netværkstjeneste kan modtagerne se afsenderens IP-adresse og almindelige forespørgselshoveder. Deres behandling heraf er underlagt deres egne privatlivspolitikker, som udvikleren ikke har kontrol over.
+Programmets API-forespørgsler bruger HTTPS; downloadadresser til coverbilleder og lydfiler returneres af NetEase Cloud Music og QQ Music; kun adresser på den pågældende platforms domæner accepteres. Som ved enhver netværkstjeneste kan modtagerne se afsenderens IP-adresse og almindelige forespørgselshoveder. Deres behandling heraf er underlagt deres egne privatlivspolitikker, som udvikleren ikke har kontrol over.
 
-### 4. NetEase-konto og loginoplysninger
+### 4. Cloud-konti og loginoplysninger
 
-- Der logges ind med QR-kode eller ved manuelt at indsætte en cookie. Programmet indhenter eller gemmer ikke brugerens NetEase-adgangskode.
-- Den cookie, der opnås ved login, krypteres med Windows Data Protection API (DPAPI, aktuel brugers omfang) og gemmes i `player_state.json`. Kun den samme Windows-brugerkonto kan dekryptere den.
+- NetEase Cloud Music logges ind med QR-kode eller ved manuelt at indsætte en cookie; QQ Music logges ind ved at scanne en QR-kode med QQ eller WeChat. Programmet indhenter eller gemmer ikke brugerens adgangskode til NetEase, QQ eller WeChat.
+- De loginoplysninger, der opnås ved login (NetEase-cookien, QQ Musics login-token), krypteres med Windows Data Protection API (DPAPI, aktuel brugers omfang) og gemmes i `player_state.json`. Kun den samme Windows-brugerkonto kan dekryptere den.
 - Når brugeren logger ud under Indstillinger, slettes oplysningerne fra hukommelsen og disken.
 - En indsat cookie er en loginoplysning med vide rettigheder. Indsæt den ikke på en computer, du ikke har tillid til, og del ikke `player_state.json` med andre.
 
@@ -201,6 +206,7 @@ Programmets API-forespørgsler bruger HTTPS; downloadadresser til coverbilleder 
 De tredjepartstjenester, Klang bruger, har deres egne privatlivspolitikker og vilkår. Ved at bruge den pågældende funktion sendes de beskrevne data til den respektive udbyder:
 
 - NetEase Cloud Music: <https://music.163.com>
+- QQ Music: <https://y.qq.com>
 - LRCLIB: <https://lrclib.net>
 - Open-Meteo: <https://open-meteo.com/en/terms>
 - GitHub: <https://docs.github.com/site-policy/privacy-policies/github-general-privacy-statement>
@@ -208,9 +214,9 @@ De tredjepartstjenester, Klang bruger, har deres egne privatlivspolitikker og vi
 ### 6. Brugerens kontrol
 
 - Når "Udfyld cover og tekster automatisk" er slået fra, slår programmet ikke længere metadata eller sangtekster op online for lokale numre.
-- Hvis brugeren ikke logger ind på NetEase, ikke slår "Vejreffekter" til og ikke bruger "Søg efter opdateringer" eller "Søg sangtekst online", sendes de tilsvarende forespørgsler ikke.
+- Hvis brugeren ikke logger ind på NetEase Cloud Music eller QQ Music, ikke slår "Vejreffekter" til og ikke bruger "Søg efter opdateringer" eller "Søg sangtekst online", sendes de tilsvarende forespørgsler ikke.
 - Alle lokale data fjernes ved at lukke programmet og slette mappen `%LocalAppData%\Klang`.
-- NetEase-lydcachen kan ryddes særskilt under Indstillinger → Netværk.
+- Cloud-lydcachen kan ryddes særskilt under Indstillinger → Netværk.
 
 ### 7. Sikkerhed
 
