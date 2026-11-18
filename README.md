@@ -1,7 +1,7 @@
 <div align="center">
   <img src="Klang.WinUI/Assets/AppLogo.png" width="96" height="96" alt="Klang" />
   <h1>Klang</h1>
-  <p>面向 Windows 的本地无损音乐播放器，集成网易云音乐</p>
+  <p>面向 Windows 的本地无损音乐播放器，集成网易云音乐与 QQ 音乐</p>
 
   [![Release](https://img.shields.io/github/v/release/gwj0323/klang?label=release&color=blue)](https://github.com/gwj0323/klang/releases)
   [![License](https://img.shields.io/badge/license-GPL--3.0-green)](LICENSE)
@@ -11,7 +11,7 @@
 
 ---
 
-Klang 是一款 Windows 桌面音乐播放器，支持本地音频文件和网易云音乐。
+Klang 是一款 Windows 桌面音乐播放器，支持本地音频文件，以及网易云音乐、QQ 音乐的云端曲库。
 
 当前版本基于 WinUI 3 / .NET 10（`Klang.WinUI`）。早期的 PyQt6 版本保留在 `qt6_player`，见[文末](#pyqt6-旧版)。
 
@@ -32,10 +32,11 @@ Klang 取自丹麦语 klang，意为声音、音色、余音。
 
 | 文件 | 说明 |
 | :--- | :--- |
-| `Klang-Setup-<版本>-x64.exe` | 安装版。默认安装到当前用户目录，无需管理员权限，可选择创建桌面快捷方式，支持卸载与覆盖升级 |
+| `Klang-Setup-<版本>-x64.exe` | 安装版。默认安装到当前用户目录，无需管理员权限，可选择创建桌面快捷方式，支持卸载与覆盖升级；安装或卸载时如果 Klang 正在运行，会提示关闭 |
 | `Klang-WinUI-win-x64.zip` | 绿色版。解压后运行 `Klang.WinUI.exe` |
 
-- 系统要求：Windows 10 1809（17763）及以上，x64。应用自带运行时，无需另装 .NET。
+- 系统要求：Windows 10 1809（17763）及以上，x64。
+- 需要先安装 [.NET 10 运行时](https://dotnet.microsoft.com/download/dotnet/10.0)（.NET Runtime 或 .NET Desktop Runtime 均可）；Windows App SDK 已随程序附带，无需另装。
 - 安装包与程序目前未做代码签名，首次运行时 Windows SmartScreen 可能给出提示，选择“更多信息 → 仍要运行”即可。
 - 用户数据保存在 `%LocalAppData%\Klang`，卸载不会删除。
 
@@ -56,7 +57,7 @@ Klang 取自丹麦语 klang，意为声音、音色、余音。
 
 ### 切歌与播放模式
 - 列表循环、单曲循环、随机播放，以及漫游模式：根据收听历史（完整播放、跳过、顺序、时段等）学习偏好并选择下一首，学习数据保存在本地，可随时重置。
-- 自动混音：歌曲临近结束时与下一首等功率交叉淡入淡出。两首速度相差 8% 以内时对齐节拍、匹配速度，并在中段做低频交接（同一时刻只保留一首歌的低音）；速度差过大或没有稳定节拍时，改为普通的交叉淡入淡出，并跳过结尾与开头的静音。混音时长可选短 / 标准 / 长，调性不相容时自动减半；开启回放增益时，增益随混音进度平滑过渡。可设为关闭 / 仅漫游模式 / 所有播放模式。网易云曲目在下一首预缓冲完成后同样参与混音；CUE 分轨不混音。
+- 自动混音：歌曲临近结束时与下一首等功率交叉淡入淡出。两首速度相差 8% 以内时对齐节拍、匹配速度，并在中段做低频交接（同一时刻只保留一首歌的低音）；速度差过大或没有稳定节拍时，改为普通的交叉淡入淡出，并跳过结尾与开头的静音。混音时长可选短 / 标准 / 长，调性不相容时自动减半；开启回放增益时，增益随混音进度平滑过渡。可设为关闭 / 仅漫游模式 / 所有播放模式。云端曲目在下一首预缓冲完成后同样参与混音；CUE 分轨不混音。
 
 ### 曲库管理
 - 监视多个音乐文件夹，新增、修改、删除自动同步；元数据未变化的文件跳过解析，启动快。
@@ -66,14 +67,16 @@ Klang 取自丹麦语 klang，意为声音、音色、余音。
 
 ### 歌词
 - 基于 Win2D 的歌词渲染：当前句放大、平滑滚动，支持逐字高亮（增强 LRC）、翻译与罗马音副行。
-- 本地 `.lrc`、内嵌歌词、网易云、[LRCLIB](https://lrclib.net) 多个来源；联网获取的歌词缓存在本地。
+- 本地 `.lrc`、内嵌歌词、网易云、[LRCLIB](https://lrclib.net) 多个来源，QQ 音乐曲目使用 QQ 音乐的歌词；联网获取的歌词缓存在本地。
 - 歌词时间校准：整体提前或延后，也可点击“正在演唱的那一句”自动对齐，按歌曲分别保存。
 - 桌面歌词、歌词海报生成。
 
-### 网易云音乐
-- 扫码或 Cookie 登录，Cookie 使用 Windows DPAPI 加密保存，仅当前 Windows 用户可解密。
-- 同步“我喜欢的音乐”、个人与收藏的歌单、每日推荐；支持在线搜索与试听。
-- 标准、极高、无损 FLAC、Hi-Res、超清母带等音质可选，不可用时自动降级；本地缓存有大小上限，超出后清除最久未播放的文件。
+### 云端音乐
+云端页面顶部可以在网易云音乐和 QQ 音乐之间切换。两者都使用非官方接口，平台调整后可能暂时失效；会员歌曲与高音质需要账号有对应会员。
+
+- 网易云音乐：扫码或 Cookie 登录；同步“我喜欢的音乐”、个人与收藏的歌单、每日推荐；标准、极高、无损 FLAC、Hi-Res、超清母带等音质可选。
+- QQ 音乐：微信或 QQ 扫码登录；同步“我喜欢”与个人歌单、雷达推荐；标准 128k、高品质 320k、无损 FLAC 可选，不使用加密格式。
+- 共同：支持在线搜索与试听；所选音质不可用时自动降级；登录凭据使用 Windows DPAPI 加密保存，仅当前 Windows 用户可解密；音频与封面只从对应平台的域名下载；本地缓存按平台分别设上限，超出后清除最久未播放的文件；重启后恢复上次播放的云端歌曲和队列。
 
 ### 任务栏播放条
 - 在“视图”或“设置 → 外观”开启（Ctrl+B）。支持透明背景、左右停靠、拖动吸附和空间避让；空间不足时显示紧凑布局，再不足则隐藏。点封面恢复主窗口。
@@ -93,6 +96,8 @@ Klang 仅在以下情况联网，均可在设置中控制或不使用相应功�
 | :--- | :--- | :--- |
 | 自动补全封面与歌词（设置中可关闭） | 网易云音乐、LRCLIB | 歌名、歌手、专辑、时长 |
 | 网易云账号与云端播放 | 网易云音乐 | 登录凭据与请求的曲目 |
+| QQ 音乐账号与云端播放 | QQ 音乐；扫码时另访问 QQ 登录或微信开放平台 | 登录凭据与请求的曲目 |
+| 天气效果（默认关闭） | Open-Meteo | 城市名；约 1 千米精度的经纬度 |
 | 检查更新 | GitHub | 无个人信息 |
 
 曲库、播放统计和设置只保存在本机 `%LocalAppData%\Klang`。 完整说明见 [PRIVACY.md](PRIVACY.md)（简体中文 / English / Dansk）。
@@ -141,7 +146,8 @@ ISCC.exe /DAppVersion=2.4.0 /DSourceDir=..\publish\Klang.WinUI installer\Klang.i
 | 路径 | 内容 |
 | :--- | :--- |
 | `Klang.WinUI/` | WinUI 3 应用（当前主版本） |
-| `Klang.WinUI/Services/` | 音频引擎、DSP、曲库、歌词、分析、网易云等服务 |
+| `Klang.WinUI/Services/` | 音频引擎、DSP、曲库、歌词、分析等服务 |
+| `Klang.WinUI/Services/Cloud/` | 云端来源接口；网易云（`Netease/`）、QQ 音乐（`QQMusic/`）各有一份实现 |
 | `Klang.WinUI/Languages/` | 界面语言文件（`en.json`、`da.json`，以中文原文为键） |
 | `installer/` | Inno Setup 安装脚本 |
 | `qt6_player/`、`src/` | 早期的 PyQt6 版本 |
@@ -204,6 +210,8 @@ pyinstaller Klang.spec --noconfirm
 | [NAudio](https://github.com/naudio/NAudio) | MIT | 音频解码、WASAPI 输出 |
 | [TagLib#](https://github.com/mono/taglib-sharp) | LGPL-2.1 | 音频标签、封面与内嵌歌词读写 |
 | [QRCoder](https://github.com/codebude/QRCoder) | MIT | 登录二维码生成 |
+| [PyNCM](https://github.com/greats3an/pyncm) | GPL-3.0 | 网易云音乐 WeAPI 加密与请求（移植为 C#） |
+| [QQMusicApi](https://github.com/luren-dc/QQMusicApi)（luren-dc） | GPL-3.0 | QQ 音乐接口的请求格式、签名与扫码登录流程（参考后用 C# 重写） |
 | [ComputeSharp](https://github.com/Sergio0694/ComputeSharp) | MIT | GPU 计算（动态背景） |
 | [AutoEq](https://github.com/jaakkopasanen/AutoEq) | MIT | 耳机频响补偿数据 |
 | [LRCLIB](https://lrclib.net) | — | 歌词数据来源（开放接口） |
