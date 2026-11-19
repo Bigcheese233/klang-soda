@@ -183,11 +183,15 @@ public class LyricsService
         var transEntries = !string.IsNullOrWhiteSpace(transLrc) ? ParseRawEntries(transLrc) : new List<RawLrcEntry>();
 
         var romaEntries = !string.IsNullOrWhiteSpace(romaLrc) ? ParseRawEntries(romaLrc) : new List<RawLrcEntry>();
-        string FindNear(List<RawLrcEntry> list, double t) => list
+        string FindNear(List<RawLrcEntry> list, double t) => Clean(list
             .Where(te => Math.Abs(te.Time - t) <= 0.8)
             .OrderBy(te => Math.Abs(te.Time - t))
             .Select(te => te.Text)
-            .FirstOrDefault() ?? "";
+            .FirstOrDefault());
+
+        // 网易云的翻译里，不需要翻译的行（比如中文歌里的中文句）写成 “//”，当作没有翻译（#26）
+        static string Clean(string? s) =>
+            string.IsNullOrWhiteSpace(s) || s.All(ch => ch == '/' || char.IsWhiteSpace(ch)) ? "" : s.Trim();
 
         var rawList = new List<(double Time, string Text, string Sub, string Roma, List<LyricWord>? Words)>();
         foreach (var entry in primaryEntries)
@@ -201,32 +205,42 @@ public class LyricsService
             {
                 var parts = text.Split("//", 2);
                 mainText = parts[0].Trim();
-                subText = parts[1].Trim();
+                subText = Clean(parts[1]);
             }
             else if (transEntries.Count > 0)
             {
-                var bestTrans = transEntries
+                subText = Clean(transEntries
                     .Where(te => Math.Abs(te.Time - t) <= 0.6)
                     .OrderBy(te => Math.Abs(te.Time - t))
                     .Select(te => te.Text)
-                    .FirstOrDefault();
-
-                if (!string.IsNullOrWhiteSpace(bestTrans))
-                {
-                    subText = bestTrans;
-                }
+                    .FirstOrDefault());
             }
 
             string romaText = romaEntries.Count > 0 ? FindNear(romaEntries, t) : "";
             rawList.Add((t, mainText, subText, romaText, entry.Words));
         }
 
-        var result = new List<LyricLine>();
-        for (int i = 0; i < rawList.Count; i++)
+        // 只有时间、没有文字的空行（有的歌词每句后面都跟一个，标记这句唱完）不单独占一行，
+        // 否则歌词之间会出现大段空白、间距忽大忽小（#26）；它的时间用作上一句的结束时间
+        var kept = new List<(double Time, string Text, string Sub, string Roma, List<LyricWord>? Words, double? End)>();
+        foreach (var item in rawList)
         {
-            var item = rawList[i];
-            double nextTime = (i + 1 < rawList.Count) ? rawList[i + 1].Time : item.Time + 6.0;
-            double endTime = Math.Max(item.Time + 1.2, nextTime - 0.1);
+            bool blank = string.IsNullOrWhiteSpace(item.Text) && (item.Words == null || item.Words.Count == 0);
+            if (blank)
+            {
+                if (kept.Count > 0 && kept[^1].End == null) kept[^1] = kept[^1] with { End = item.Time };
+                continue;
+            }
+            kept.Add((item.Time, item.Text, item.Sub, item.Roma, item.Words, null));
+        }
+        if (kept.Count == 0) return CreateEmptyPlaceholder(L.T("暂无歌词"));
+
+        var result = new List<LyricLine>();
+        for (int i = 0; i < kept.Count; i++)
+        {
+            var item = kept[i];
+            double nextTime = (i + 1 < kept.Count) ? kept[i + 1].Time : item.Time + 6.0;
+            double endTime = Math.Max(item.Time + 1.2, (item.End ?? nextTime) - 0.1);
 
             result.Add(new LyricLine
             {
