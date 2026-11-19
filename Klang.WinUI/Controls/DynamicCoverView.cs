@@ -106,15 +106,34 @@ public sealed class DynamicCoverView : UserControl
         return p;
     }
 
-    /// <summary>播放线程：把这一帧复制到位图，再让界面线程重画。</summary>
+    private int _framePending;
+
+    /// <summary>
+    /// 播放线程通知有新帧：只转给界面线程，在那里复制并重画。
+    /// 复制会用到和界面共用的 GPU 设备，放在播放线程上做会和界面线程的绘制同时访问设备，导致崩溃。
+    /// 界面线程忙不过来时，中间的帧直接丢掉（只保留一个待处理的通知）。
+    /// </summary>
     private void OnVideoFrame(MediaPlayer sender, object args)
     {
+        if (System.Threading.Interlocked.Exchange(ref _framePending, 1) == 1) return;
         int seq = _seq;
+        if (DispatcherQueue?.TryEnqueue(() =>
+            {
+                System.Threading.Interlocked.Exchange(ref _framePending, 0);
+                if (seq != _seq || _path == null) return;
+                CopyFrame(sender);
+            }) != true)
+            System.Threading.Interlocked.Exchange(ref _framePending, 0);
+    }
+
+    /// <summary>界面线程：把播放器当前的画面复制到位图并重画。</summary>
+    private void CopyFrame(MediaPlayer player)
+    {
         bool first;
         lock (_frameLock)
         {
             if (_device == null) return;
-            uint w = sender.PlaybackSession.NaturalVideoWidth, h = sender.PlaybackSession.NaturalVideoHeight;
+            uint w = player.PlaybackSession.NaturalVideoWidth, h = player.PlaybackSession.NaturalVideoHeight;
             if (w == 0 || h == 0) return;
             try
             {
@@ -123,18 +142,14 @@ public sealed class DynamicCoverView : UserControl
                     _frame?.Dispose();
                     _frame = new CanvasRenderTarget(_device, w, h, 96);
                 }
-                sender.CopyFrameToVideoSurface(_frame);
+                player.CopyFrameToVideoSurface(_frame);
             }
             catch { return; }   // 设备丢失等：等 CreateResources 重建
             first = !_hasFrame;
             _hasFrame = true;
         }
-        DispatcherQueue?.TryEnqueue(() =>
-        {
-            if (seq != _seq || _path == null) return;
-            _canvas.Invalidate();
-            if (first && !_shown) Fade(true, 420);
-        });
+        _canvas.Invalidate();
+        if (first && !_shown) Fade(true, 420);
     }
 
     private void OnDraw(CanvasControl sender, CanvasDrawEventArgs args)

@@ -86,7 +86,7 @@ Klang 取自丹麦语 klang，意为声音、音色、余音。
 - Windows 11 Mica / Acrylic 背景，浅色 / 深色 / 跟随系统。
 - 沉浸模式（随封面主色变化的动态背景）、迷你窗口、全屏。
 - Windows 系统媒体控件（SMTC）与多媒体键。
-- 界面语言：简体中文、English、Dansk；可在设置中检查 GitHub 上的新版本。
+- 界面语言：简体中文、English、Dansk；启动时自动检查 GitHub 上的新版本（可在设置中关闭）。
 
 ## 隐私与网络请求
 

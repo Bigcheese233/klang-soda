@@ -20,10 +20,9 @@
         PointerWheelChanged="Viewport_PointerWheelChanged"
         SizeChanged="Viewport_SizeChanged">
 
-        <canvas:CanvasControl
-            x:Name="LyricsCanvas"
-            ClearColor="Transparent"
-            Draw="LyricsCanvas_Draw" />
+        <!-- 直接画到交换链：每帧在 CompositionTarget.Rendering 里画完立即呈现。
+             CanvasControl 的 Invalidate 要到下一帧才画，每帧都请求重绘时实际只能画到刷新率的一半。 -->
+        <canvas:CanvasSwapChainPanel x:Name="LyricsCanvas" IsHitTestVisible="False" />
 
         <!-- 用户手动滚动时浮现的“回正”胶囊提示 -->
         <Button

@@ -57,8 +57,11 @@ public sealed partial class SettingsDialog : ContentDialog
         WeatherService.Instance.Updated += OnWeatherUpdated;
         Closed += (s, e) => WeatherService.Instance.Updated -= OnWeatherUpdated;
         LyricWordMotionSwitch.IsOn = State.LyricWordMotion;
+        SelectByTag(LyricFrameRateBox, State.LyricFrameRate.ToString(), "0");
         AutoMetaSwitch.IsOn = State.AutoFetchMetadata;
         DynamicCoverSwitch.IsOn = State.DynamicCover;
+        SelectByTag(CloseActionBox, State.CloseAction, "ask");
+        AutoCheckUpdateSwitch.IsOn = State.AutoCheckUpdate;
         SelectByTag(CacheLimitBox, State.NeteaseCacheLimitMb.ToString(), "2048");
         RefreshCacheInfo();
 
@@ -127,6 +130,21 @@ public sealed partial class SettingsDialog : ContentDialog
         State.ShowVinylDisc = VinylDiscSwitch.IsOn;
         StateService.Instance.RequestSave();
         Controls.VinylCoverCard.NotifyVinylDiscSettingChanged();
+    }
+
+    private void LyricFrameRateBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_loading || LyricFrameRateBox.SelectedItem is not ComboBoxItem { Tag: string tag } || !int.TryParse(tag, out int fps)) return;
+        State.LyricFrameRate = fps;   // 歌词控件每帧读取，立即生效
+        StateService.Instance.RequestSave();
+    }
+
+    private void CloseActionBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_loading || CloseActionBox.SelectedItem is not ComboBoxItem { Tag: string tag }) return;
+        State.CloseAction = tag;
+        StateService.Instance.RequestSave();
+        App.MainWindowInstance?.UpdateTrayIcon();   // 选“退出程序”时不再显示托盘图标
     }
 
     /// <summary>“动态封面”开关改动后触发（主窗口据此为当前歌曲加载或移除动态封面）。</summary>
@@ -268,6 +286,13 @@ public sealed partial class SettingsDialog : ContentDialog
     #region 关于 / 检查更新
 
     private UpdateInfo? _update;
+
+    private void AutoCheckUpdateSwitch_Toggled(object sender, RoutedEventArgs e)
+    {
+        if (_loading) return;
+        State.AutoCheckUpdate = AutoCheckUpdateSwitch.IsOn;
+        StateService.Instance.RequestSave();
+    }
 
     private async void CheckUpdateBtn_Click(object sender, RoutedEventArgs e)
     {

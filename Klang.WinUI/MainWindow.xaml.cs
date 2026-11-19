@@ -333,8 +333,13 @@ public sealed partial class MainWindow : Window
 
         WeatherService.Instance.Apply();   // 只有开启了“天气效果”并设置了城市才会联网
 
+        InitTray();
+        _ = AutoCheckUpdateAsync();
+
         this.Closed += (s, e) =>
         {
+            _tray?.Dispose();
+            _tray = null;
             SaveWindowAndAudioState();
             LibraryService.Instance.FlushPendingSave();
             StateService.Instance.Flush();
@@ -562,6 +567,7 @@ public sealed partial class MainWindow : Window
 
         StageCoverCard.UpdateTrack(track);
         LoadDynamicCover(track);
+        UpdateTrayTip();
         UpdateNarrowHeader(track);
         // CUE 分轨暂不加载整轨歌词（整轨 .lrc 与分轨时间轴不一致）
         StageLyricsControl.CalibrationMode = false;
@@ -783,6 +789,267 @@ public sealed partial class MainWindow : Window
             if (_currentTrack == track) BottomTransportBar.UpdateLyricSnippet(L.T("云端播放失败：") + ex.Message);
         }
     }
+
+    #region 启动时自动检查更新
+
+    private UpdateInfo? _pendingUpdate;
+    private bool _updateDialogOpen;
+
+    /// <summary>启动后稍等片刻检查 GitHub 上的新版本；失败时不打扰用户，只记日志。</summary>
+    private async System.Threading.Tasks.Task AutoCheckUpdateAsync()
+    {
+        if (!State.AutoCheckUpdate) return;
+        await System.Threading.Tasks.Task.Delay(TimeSpan.FromSeconds(8));   // 不和启动时的曲库恢复、扫描抢资源
+        UpdateInfo info;
+        try { info = await UpdateService.CheckAsync(); }
+        catch (Exception ex) { App.LogError("UpdateCheck", ex.Message); return; }
+        if (!info.HasUpdate || info.Latest == null) return;
+        if (State.SkippedUpdateVersion == info.Latest.ToString(3)) return;
+        CrashReporter.Note("发现新版本 " + info.Latest.ToString(3));
+        _pendingUpdate = info;
+        ShowPendingUpdate();
+    }
+
+    /// <summary>
+    /// 弹出新版本提示。窗口藏在托盘里、沉浸模式打开着、或者正有别的对话框时先不弹，
+    /// 等窗口恢复 / 退出沉浸模式时再弹（每次启动最多提示一次）。
+    /// </summary>
+    private async void ShowPendingUpdate()
+    {
+        var info = _pendingUpdate;
+        if (info == null || _updateDialogOpen || !AppWindow.IsVisible || ImmersiveLayer.IsOpen || Content?.XamlRoot == null) return;
+        _updateDialogOpen = true;
+        try
+        {
+            var notes = CleanReleaseNotes(info.Notes);
+            var dlg = new ContentDialog
+            {
+                Style = Application.Current.Resources["DefaultContentDialogStyle"] as Style,
+                RequestedTheme = ThemeService.Current,
+                XamlRoot = Content.XamlRoot,
+                Title = L.F("发现新版本 {0}", info.Latest!.ToString(3)),
+                Content = new StackPanel
+                {
+                    Spacing = 10,
+                    Children =
+                    {
+                        new TextBlock { Text = L.F("当前版本 {0}", UpdateService.CurrentVersionText), Opacity = 0.7 },
+                        new ScrollViewer
+                        {
+                            MaxHeight = 280,
+                            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+                            Content = new TextBlock { Text = notes.Length > 0 ? notes : L.T("（发布说明为空）"), TextWrapping = TextWrapping.Wrap, IsTextSelectionEnabled = true }
+                        }
+                    }
+                },
+                PrimaryButtonText = L.T("下载"),
+                SecondaryButtonText = L.T("跳过此版本"),
+                CloseButtonText = L.T("稍后"),
+                DefaultButton = ContentDialogButton.Primary
+            };
+            ContentDialogResult result;
+            try { result = await dlg.ShowAsync(); }
+            catch (Exception)   // 同一时间只能有一个对话框：别的对话框开着时，过一会儿再试
+            {
+                _updateDialogOpen = false;
+                await System.Threading.Tasks.Task.Delay(TimeSpan.FromSeconds(30));
+                ShowPendingUpdate();
+                return;
+            }
+            _pendingUpdate = null;
+            if (result == ContentDialogResult.Primary)
+            {
+                var url = UpdateService.IsTrustedUrl(info.DownloadUrl) ? info.DownloadUrl : info.PageUrl;
+                if (UpdateService.IsTrustedUrl(url)) { try { await Windows.System.Launcher.LaunchUriAsync(new Uri(url!)); } catch { } }
+            }
+            else if (result == ContentDialogResult.Secondary)
+            {
+                State.SkippedUpdateVersion = info.Latest.ToString(3);
+                StateService.Instance.RequestSave();
+            }
+        }
+        finally
+        {
+            _updateDialogOpen = false;
+        }
+    }
+
+    /// <summary>发布说明是 Markdown：去掉标题井号和加粗符号，按纯文本显示。</summary>
+    private static string CleanReleaseNotes(string md)
+    {
+        if (string.IsNullOrWhiteSpace(md)) return "";
+        var lines = md.Replace("\r\n", "\n").Split('\n')
+            .Select(l => System.Text.RegularExpressions.Regex.Replace(l, @"^\s*#{1,6}\s*", ""))
+            .Select(l => l.Replace("**", "").Replace("`", ""));
+        return string.Join("\n", lines).Trim();
+    }
+
+    #endregion
+
+    #region 系统托盘 / 关闭按钮
+
+    private Views.TrayIcon? _tray;
+    private bool _exiting, _closePromptOpen;
+
+    private void InitTray()
+    {
+        AppWindow.Closing += AppWindow_Closing;
+        UpdateTrayIcon();
+    }
+
+    /// <summary>关闭行为不是“直接退出”，或者窗口正藏在托盘里时，显示托盘图标。</summary>
+    public void UpdateTrayIcon()
+    {
+        bool want = State.CloseAction != "exit" || !AppWindow.IsVisible;
+        if (want && _tray == null)
+        {
+            try
+            {
+                _tray = new Views.TrayIcon
+                {
+                    IsPlaying = () => AudioEngineService.Instance.IsPlaying,
+                    IsDark = () => (Content as FrameworkElement)?.ActualTheme == ElementTheme.Dark
+                };
+                _tray.ShowRequested += ShowFromTray;
+                _tray.PlayPauseRequested += TogglePlayPause;
+                _tray.PrevRequested += PlayPrev;
+                _tray.NextRequested += PlayNext;
+                _tray.ExitRequested += ExitApp;
+                UpdateTrayTip();
+            }
+            catch (Exception ex)
+            {
+                App.LogError("Tray", ex.Message);
+                _tray = null;
+            }
+        }
+        else if (!want && _tray != null)
+        {
+            _tray.Dispose();
+            _tray = null;
+        }
+    }
+
+    private void UpdateTrayTip() =>
+        _tray?.SetToolTip(_currentTrack == null ? "Klang" : $"{_currentTrack.Title} - {_currentTrack.Artist}");
+
+    /// <summary>
+    /// 关掉当前打开的对话框（设置、更新提示等），等它真正关闭后返回；没有打开的对话框时返回 false。
+    /// 对话框开着时直接关闭窗口，进程会在 CoreMessagingXP.dll 里崩溃；同一时间也只能开一个对话框，关闭询问弹不出来。
+    /// </summary>
+    private async System.Threading.Tasks.Task<bool> CloseOpenDialogsAsync()
+    {
+        if (Content?.XamlRoot is not { } root) return false;
+        var waits = new List<System.Threading.Tasks.Task>();
+        foreach (var popup in Microsoft.UI.Xaml.Media.VisualTreeHelper.GetOpenPopupsForXamlRoot(root))
+        {
+            if (popup.Child is not ContentDialog dlg) continue;
+            var tcs = new System.Threading.Tasks.TaskCompletionSource();
+            dlg.Closed += (s, e) => tcs.TrySetResult();
+            dlg.Hide();
+            waits.Add(tcs.Task);
+        }
+        if (waits.Count == 0) return false;
+        await System.Threading.Tasks.Task.WhenAny(System.Threading.Tasks.Task.WhenAll(waits), System.Threading.Tasks.Task.Delay(1500));
+        await System.Threading.Tasks.Task.Delay(50);   // 让对话框的关闭动画和弹出层清理走完
+        return true;
+    }
+
+    private async void AppWindow_Closing(Microsoft.UI.Windowing.AppWindow sender, Microsoft.UI.Windowing.AppWindowClosingEventArgs args)
+    {
+        string action = _exiting ? "exit" : State.CloseAction;
+        if (action == "exit")
+        {
+            // 有对话框开着：先取消这次关闭，关掉对话框后再关窗口
+            if (Content?.XamlRoot != null && Microsoft.UI.Xaml.Media.VisualTreeHelper.GetOpenPopupsForXamlRoot(Content.XamlRoot).Any(p => p.Child is ContentDialog))
+            {
+                args.Cancel = true;
+                _exiting = true;
+                await CloseOpenDialogsAsync();
+                Close();
+            }
+            return;
+        }
+
+        args.Cancel = true;
+        if (action == "tray")
+        {
+            await CloseOpenDialogsAsync();
+            HideToTray();
+            return;
+        }
+
+        // 第一次（或没记住选择时）：询问
+        if (_closePromptOpen) return;
+        _closePromptOpen = true;
+        try
+        {
+            await CloseOpenDialogsAsync();
+            var remember = new CheckBox { Content = L.T("记住我的选择，不再询问"), Margin = new Thickness(0, 12, 0, 0) };
+            var dlg = new ContentDialog
+            {
+                Style = Application.Current.Resources["DefaultContentDialogStyle"] as Style,
+                RequestedTheme = ThemeService.Current,
+                XamlRoot = Content.XamlRoot,
+                Title = L.T("关闭 Klang"),
+                Content = new StackPanel
+                {
+                    Children =
+                    {
+                        new TextBlock { Text = L.T("最小化到系统托盘后会继续在后台播放，可以从托盘图标重新打开或退出。"), TextWrapping = TextWrapping.Wrap },
+                        remember
+                    }
+                },
+                PrimaryButtonText = L.T("最小化到托盘"),
+                SecondaryButtonText = L.T("退出"),
+                CloseButtonText = L.T("取消"),
+                DefaultButton = ContentDialogButton.Primary
+            };
+            ContentDialogResult result;
+            try { result = await dlg.ShowAsync(); }
+            catch (Exception ex) { App.LogError("ClosePrompt", ex.Message); return; }   // 仍有对话框没关掉时 ShowAsync 会抛异常
+            if (result == ContentDialogResult.None) return;
+            bool toTray = result == ContentDialogResult.Primary;
+            if (remember.IsChecked == true)
+            {
+                State.CloseAction = toTray ? "tray" : "exit";
+                StateService.Instance.RequestSave();
+            }
+            if (toTray) HideToTray(); else ExitApp();
+        }
+        finally
+        {
+            _closePromptOpen = false;
+        }
+    }
+
+    private void HideToTray()
+    {
+        CrashReporter.Note("最小化到托盘");
+        SaveWindowAndAudioState();
+        StateService.Instance.Flush();
+        AppWindow.Hide();
+        UpdateTrayIcon();
+    }
+
+    /// <summary>从托盘恢复（或第二次启动 Klang 时把已有窗口带到前台）。</summary>
+    public void ShowFromTray()
+    {
+        AppWindow.Show();
+        if (AppWindow.Presenter is Microsoft.UI.Windowing.OverlappedPresenter { State: Microsoft.UI.Windowing.OverlappedPresenterState.Minimized } p) p.Restore();
+        Activate();
+        UpdateTrayIcon();
+        ShowPendingUpdate();   // 藏在托盘期间发现的新版本，窗口恢复后再提示
+    }
+
+    /// <summary>真正退出（托盘菜单、关闭询问里选“退出”）。</summary>
+    private void ExitApp()
+    {
+        _exiting = true;
+        Close();
+    }
+
+    #endregion
 
     #region 动态封面
 
@@ -1761,6 +2028,7 @@ public sealed partial class MainWindow : Window
 
         ImmersiveLayer.Close();
         ApplyDynamicCover();
+        ShowPendingUpdate();   // 沉浸模式期间发现的新版本，退出后再提示
         if (_immersiveSetFullscreen)
         {
             ExitFullscreen();

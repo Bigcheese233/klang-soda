@@ -130,6 +130,7 @@ public class AppState
     public string TaskbarPlayerSide { get; set; } = "right";    // 停靠在任务栏哪一侧：left | right
 
     public bool AutoFetchMetadata { get; set; } = true;     // 本地歌曲缺封面/信息/歌词时在线补全
+    public int LyricFrameRate { get; set; } = 0;              // 歌词动画帧率上限：0 = 跟随显示器刷新率，否则 120 / 60 / 30
     public string LyricSubMode { get; set; } = "trans";   // trans | roma | both | off
     public int WasapiLatencyMs { get; set; } = 50;
     public bool WasapiExclusive { get; set; }               // WASAPI 独占模式：按文件原采样率 / 位深直接驱动声卡
@@ -161,6 +162,9 @@ public class AppState
     public string NeteaseNickname { get; set; } = "";
     public string NeteaseAvatarUrl { get; set; } = "";
     public string NeteaseQuality { get; set; } = "lossless";
+    public bool AutoCheckUpdate { get; set; } = true;       // 启动后自动检查 GitHub 上的新版本（只读公开的发布列表）
+    public string SkippedUpdateVersion { get; set; } = "";  // 用户选了“跳过此版本”的版本号，自动检查时不再提示它
+    public string CloseAction { get; set; } = "ask";        // 点窗口关闭按钮：ask 询问 | tray 最小化到托盘 | exit 退出
     public bool DynamicCover { get; set; } = true;          // 云端歌曲有动态封面时在封面上播放（网易云，需要登录）
     public int NeteaseCacheLimitMb { get; set; } = 2048;   // 云端缓存上限（每个来源各自计算）
 
@@ -173,6 +177,8 @@ public class AppState
     // 上次播放的是云端曲目时，保存当时的云端队列（含那首歌）；播放本地曲目后清空
     public List<OnlineTrackSnapshot> LastOnlineQueue { get; set; } = new();
     public List<string> WatchedFolders { get; set; } = new();
+    // 手动从曲库移除、文件仍在监视文件夹里的歌曲（音频路径，CUE 分轨为 “路径#轨号”）：重新扫描时不再加回
+    public List<string> ExcludedFiles { get; set; } = new();
     public Dictionary<string, List<string>> CustomPlaylists { get; set; } = new();
     public List<SmartPlaylistDef> SmartPlaylists { get; set; } = new();
     public RoamModel Roam { get; set; } = new();
@@ -245,6 +251,7 @@ public class StateService
                     if (state.EqGainsDb == null || state.EqGainsDb.Length != 5) state.EqGainsDb = new float[5];
                     state.Tracks ??= new();
                     state.WatchedFolders ??= new();
+                    state.ExcludedFiles ??= new();
                     state.CustomPlaylists ??= new();
                     state.SmartPlaylists ??= new();
                     state.Roam ??= new();

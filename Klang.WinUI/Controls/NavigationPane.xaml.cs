@@ -222,6 +222,7 @@ public sealed partial class NavigationPane : UserControl
     {
         _currentTrack = track;
         CloudView.SetCurrentTrack(track);
+        if (_multiSelect) return;   // 多选时选中状态是用户勾选的，不能被“正在播放”覆盖
         if (track != null && _listItems.Contains(track))
         {
             TracksListView.SelectedItem = track;
@@ -273,6 +274,7 @@ public sealed partial class NavigationPane : UserControl
                 if (LibraryService.Instance.IsScanning)
                     TrackCountText.Text = L.T("等待当前扫描完成…");
 
+                LibraryService.Instance.ForgetExclusionsUnder(folder);   // 主动导入：之前移除的歌曲也加回来
                 var added = await LibraryService.Instance.AddFolderAsync(folder);
                 MetadataService.Instance.Enqueue(added);
 
@@ -315,6 +317,7 @@ public sealed partial class NavigationPane : UserControl
     {
         if (sender.SelectedItem?.Tag is not string tag || tag == _currentTab) return;
 
+        ExitMultiSelect(refresh: false);
         _currentTab = tag;
         _currentTabIndex = tag switch
         {
@@ -518,8 +521,8 @@ public sealed partial class NavigationPane : UserControl
         // 只有“自己建的歌单 + 默认顺序 + 没搜索 / 筛选 / 分组”时允许拖拽调整顺序
         bool canReorder = inPlaylistOpen && !_openIsSmart && _currentSort == "default" && _groupMode == "none"
             && query.Length == 0 && !FilterActive;
-        TracksListView.CanReorderItems = canReorder;
-        TracksListView.AllowDrop = canReorder;
+        TracksListView.CanReorderItems = canReorder && !_multiSelect;
+        TracksListView.AllowDrop = canReorder && !_multiSelect;
 
         var ordered = sorted.ToList();
         var items = new List<object>();
@@ -558,7 +561,7 @@ public sealed partial class NavigationPane : UserControl
 
         UpdateEmptyState();
 
-        if (_currentTrack != null && _listItems.Contains(_currentTrack))
+        if (!_multiSelect && _currentTrack != null && _listItems.Contains(_currentTrack))
         {
             TracksListView.SelectedItem = _currentTrack;
         }
@@ -665,18 +668,249 @@ public sealed partial class NavigationPane : UserControl
     {
         if (e.ClickedItem is TrackItem track)
         {
+            // 按住 Ctrl / Shift 点击：进入多选（Shift 从当前高亮的那首选到点击的这首）
+            bool ctrl = IsKeyDown(Windows.System.VirtualKey.Control), shift = IsKeyDown(Windows.System.VirtualKey.Shift);
+            if (ctrl || shift)
+            {
+                EnterMultiSelect(track, shift ? TracksListView.SelectedIndex : -1);
+                return;
+            }
             Queue = DisplayTracks.ToList();
             TrackSelected?.Invoke(this, track);
         }
     }
 
+    private static bool IsKeyDown(Windows.System.VirtualKey key) =>
+        Microsoft.UI.Input.InputKeyboardSource.GetKeyStateForCurrentThread(key).HasFlag(Windows.UI.Core.CoreVirtualKeyStates.Down);
+
     private void TracksListView_DoubleTapped(object sender, DoubleTappedRoutedEventArgs e)
     {
+        if (_multiSelect) return;
         if (TracksListView.SelectedItem is TrackItem track)
         {
             Queue = DisplayTracks.ToList();
             TrackSelected?.Invoke(this, track);
         }
+    }
+
+    #endregion
+
+    #region 多选 / 批量操作
+
+    private bool _multiSelect;
+
+    /// <summary>是否处于多选状态。</summary>
+    public bool IsMultiSelecting => _multiSelect;
+
+    private List<TrackItem> SelectedTracks => TracksListView.SelectedItems.OfType<TrackItem>().ToList();
+
+    /// <summary>
+    /// 进入多选：列表显示复选框，点击只勾选不播放，工具栏换成批量操作条。
+    /// rangeFrom ≥ 0 时（Shift+点击）从这一行选到 first。
+    /// </summary>
+    private void EnterMultiSelect(TrackItem? first, int rangeFrom = -1)
+    {
+        if (_multiSelect)
+        {
+            if (first != null && !TracksListView.SelectedItems.Contains(first)) TracksListView.SelectedItems.Add(first);
+            return;
+        }
+        _multiSelect = true;
+        TracksListView.CanReorderItems = false;
+        TracksListView.AllowDrop = false;
+        TracksListView.IsItemClickEnabled = false;
+        TracksListView.SelectionMode = ListViewSelectionMode.Multiple;
+        TracksListView.SelectedItems.Clear();
+        ToolbarGrid.Visibility = Visibility.Collapsed;
+        SelectionBar.Visibility = Visibility.Visible;
+        UpdateSelectionBar();
+        TracksListView.Focus(FocusState.Programmatic);   // 让 Ctrl+A / Delete / Esc 落到列表上
+
+        // 从列表的点击事件里进来时，列表处理完这次点击还会重置选中状态：等它处理完再选
+        DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
+        {
+            if (!_multiSelect || first == null) return;
+            int idx = _listItems.IndexOf(first);
+            if (rangeFrom >= 0 && idx >= 0)
+            {
+                int lo = Math.Min(rangeFrom, idx), hi = Math.Max(rangeFrom, idx);
+                TracksListView.SelectRange(new Microsoft.UI.Xaml.Data.ItemIndexRange(lo, (uint)(hi - lo + 1)));
+            }
+            else if (!TracksListView.SelectedItems.Contains(first))
+            {
+                TracksListView.SelectedItems.Add(first);
+            }
+        });
+    }
+
+    /// <summary>退出多选，恢复单击播放和“正在播放”高亮。</summary>
+    private void ExitMultiSelect(bool refresh = true)
+    {
+        if (!_multiSelect) return;
+        _multiSelect = false;
+        TracksListView.SelectionMode = ListViewSelectionMode.Single;
+        TracksListView.IsItemClickEnabled = true;
+        SelectionBar.Visibility = Visibility.Collapsed;
+        ToolbarGrid.Visibility = Visibility.Visible;
+        if (refresh) RefreshView();   // 恢复拖动排序的开关和当前曲目的高亮
+    }
+
+    private void TracksListView_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (!_multiSelect) return;
+        // 分组标题不能被选中（全选时会一起选上）
+        foreach (var h in e.AddedItems.OfType<GroupHeader>().ToList()) TracksListView.SelectedItems.Remove(h);
+        UpdateSelectionBar();
+    }
+
+    private void UpdateSelectionBar()
+    {
+        int n = TracksListView.SelectedItems.OfType<TrackItem>().Count();
+        SelectionCountText.Text = L.F("已选 {0} 首", n);
+        SelAddToPlaylistBtn.IsEnabled = SelAddToQueueBtn.IsEnabled = SelRemoveBtn.IsEnabled = n > 0;
+    }
+
+    private void TracksListView_KeyDown(object sender, KeyRoutedEventArgs e)
+    {
+        if (!_multiSelect) return;
+        switch (e.Key)
+        {
+            case Windows.System.VirtualKey.Escape:
+                ExitMultiSelect();
+                e.Handled = true;
+                break;
+            case Windows.System.VirtualKey.Delete:
+                RemoveSelected();
+                e.Handled = true;
+                break;
+            case Windows.System.VirtualKey.A when IsKeyDown(Windows.System.VirtualKey.Control):
+                TracksListView.SelectAll();
+                e.Handled = true;
+                break;
+        }
+    }
+
+    private void SelectAllBtn_Click(object sender, RoutedEventArgs e) => TracksListView.SelectAll();
+
+    private void SelDoneBtn_Click(object sender, RoutedEventArgs e) => ExitMultiSelect();
+
+    private void SelAddToQueueBtn_Click(object sender, RoutedEventArgs e)
+    {
+        foreach (var t in SelectedTracks.Where(t => !t.IsMissing)) AddToQueueEnd(t);
+        ExitMultiSelect();
+    }
+
+    private void SelAddToPlaylistBtn_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement anchor) BuildAddToPlaylistMenu(SelectedTracks, ExitMultiSelectAction).ShowAt(anchor);
+    }
+
+    private void ExitMultiSelectAction() => ExitMultiSelect();
+
+    private void SelRemoveBtn_Click(object sender, RoutedEventArgs e) => RemoveSelected();
+
+    /// <summary>批量从曲库移除（只改曲库，不删文件），先确认。</summary>
+    private async void RemoveSelected()
+    {
+        var tracks = SelectedTracks;
+        if (tracks.Count == 0) return;
+        var dlg = new ContentDialog
+        {
+            Style = Application.Current.Resources["DefaultContentDialogStyle"] as Style,
+            RequestedTheme = ThemeService.Current,
+            XamlRoot = XamlRoot,
+            Title = L.F("从曲库移除 {0} 首歌曲？", tracks.Count),
+            Content = L.T("只从曲库中移除，不会删除硬盘上的文件；之后重新扫描文件夹也不会再加回。\n再次手动添加所在文件夹可以恢复。"),
+            PrimaryButtonText = L.T("移除"),
+            CloseButtonText = L.T("取消"),
+            DefaultButton = ContentDialogButton.Close
+        };
+        if (await dlg.ShowAsync() != ContentDialogResult.Primary) return;
+
+        foreach (var t in tracks)
+        {
+            Queue.Remove(t);
+            UpNext.Remove(t);
+            TrackRemoved?.Invoke(this, t);
+        }
+        LibraryService.Instance.RemoveTracks(tracks);
+        ExitMultiSelect();
+    }
+
+    /// <summary>“添加到歌单”子菜单的条目（单首和多选共用）。</summary>
+    private MenuFlyout BuildAddToPlaylistMenu(List<TrackItem> tracks, Action? done = null)
+    {
+        var flyout = new MenuFlyout();
+        foreach (var item in PlaylistMenuItems(tracks, done)) flyout.Items.Add(item);
+        return flyout;
+    }
+
+    private List<MenuFlyoutItemBase> PlaylistMenuItems(List<TrackItem> tracks, Action? done)
+    {
+        var items = new List<MenuFlyoutItemBase>();
+        foreach (var name in LibraryService.Instance.PlaylistNames.OrderBy(n => n, StringComparer.CurrentCultureIgnoreCase))
+        {
+            var item = new MenuFlyoutItem { Text = name };
+            var captured = name;
+            item.Click += (s, e) =>
+            {
+                foreach (var t in tracks) LibraryService.Instance.AddToPlaylist(captured, t);
+                done?.Invoke();
+            };
+            items.Add(item);
+        }
+        if (items.Count > 0) items.Add(new MenuFlyoutSeparator());
+        var newPl = new MenuFlyoutItem { Text = L.T("新建歌单…") };
+        newPl.Click += async (s, e) =>
+        {
+            var name = await PromptTextAsync(L.T("新建歌单"), L.T("歌单名称"), "");
+            if (name != null && LibraryService.Instance.CreatePlaylist(name))
+            {
+                foreach (var t in tracks) LibraryService.Instance.AddToPlaylist(name.Trim(), t);
+                done?.Invoke();
+            }
+        };
+        items.Add(newPl);
+        return items;
+    }
+
+    /// <summary>多选时的右键菜单：作用于全部选中的歌曲。</summary>
+    private MenuFlyout BuildBatchMenu(List<TrackItem> tracks)
+    {
+        var flyout = new MenuFlyout();
+        var playNext = new MenuFlyoutItem { Text = L.F("下一首播放（{0} 首）", tracks.Count), Icon = new FontIcon { Glyph = "" } };
+        playNext.Click += (s, e) =>
+        {
+            // 倒序插入，播放顺序和列表顺序一致
+            foreach (var t in Enumerable.Reverse(tracks).Where(t => !t.IsMissing)) PlayNextInQueue(t);
+            ExitMultiSelect();
+        };
+        flyout.Items.Add(playNext);
+        var addQueue = new MenuFlyoutItem { Text = L.F("加入播放队列（{0} 首）", tracks.Count), Icon = new FontIcon { Glyph = "" } };
+        addQueue.Click += (s, e) => SelAddToQueueBtn_Click(s, e);
+        flyout.Items.Add(addQueue);
+
+        var addSub = new MenuFlyoutSubItem { Text = L.T("添加到歌单"), Icon = new FontIcon { Glyph = "" } };
+        foreach (var item in PlaylistMenuItems(tracks, ExitMultiSelectAction)) addSub.Items.Add(item);
+        flyout.Items.Add(addSub);
+
+        if (_currentTab == "playlists" && _openPlaylist != null && !_openIsSmart)
+        {
+            var playlistName = _openPlaylist;
+            var rm = new MenuFlyoutItem { Text = L.F("从歌单移除（{0} 首）", tracks.Count), Icon = new FontIcon { Glyph = "" } };
+            rm.Click += (s, e) =>
+            {
+                foreach (var t in tracks) LibraryService.Instance.RemoveFromPlaylist(playlistName, t);
+                ExitMultiSelect();
+            };
+            flyout.Items.Add(rm);
+        }
+
+        flyout.Items.Add(new MenuFlyoutSeparator());
+        var del = new MenuFlyoutItem { Text = L.F("从曲库移除（{0} 首）…", tracks.Count), Icon = new FontIcon { Glyph = "" } };
+        del.Click += (s, e) => RemoveSelected();
+        flyout.Items.Add(del);
+        return flyout;
     }
 
     #endregion
@@ -762,6 +996,14 @@ public sealed partial class NavigationPane : UserControl
     {
         if (sender is FrameworkElement fe && fe.DataContext is TrackItem track)
         {
+            if (_multiSelect)
+            {
+                // 多选时右键：作用于全部选中的歌曲（右键的这首没选中就先选上）
+                if (!TracksListView.SelectedItems.Contains(track)) TracksListView.SelectedItems.Add(track);
+                ShowFlyout(BuildBatchMenu(SelectedTracks), fe, args);
+                args.Handled = true;
+                return;
+            }
             var flyout = BuildTrackMenu(track);
             ShowFlyout(flyout, fe, args);
             args.Handled = true;
@@ -816,27 +1058,7 @@ public sealed partial class NavigationPane : UserControl
         flyout.Items.Add(new MenuFlyoutSeparator());
 
         var addSub = new MenuFlyoutSubItem { Text = L.T("添加到歌单"), Icon = new FontIcon { Glyph = "" } };
-        foreach (var name in LibraryService.Instance.PlaylistNames.OrderBy(n => n, StringComparer.CurrentCultureIgnoreCase))
-        {
-            var item = new MenuFlyoutItem { Text = name };
-            var captured = name;
-            item.Click += (s, e) =>
-            {
-                LibraryService.Instance.AddToPlaylist(captured, track);
-            };
-            addSub.Items.Add(item);
-        }
-        if (addSub.Items.Count > 0) addSub.Items.Add(new MenuFlyoutSeparator());
-        var newPl = new MenuFlyoutItem { Text = L.T("新建歌单…") };
-        newPl.Click += async (s, e) =>
-        {
-            var name = await PromptTextAsync(L.T("新建歌单"), L.T("歌单名称"), "");
-            if (name != null && LibraryService.Instance.CreatePlaylist(name))
-            {
-                LibraryService.Instance.AddToPlaylist(name.Trim(), track);
-            }
-        };
-        addSub.Items.Add(newPl);
+        foreach (var item in PlaylistMenuItems(new List<TrackItem> { track }, null)) addSub.Items.Add(item);
         flyout.Items.Add(addSub);
 
         if (_currentTab == "playlists" && _openPlaylist != null && !_openIsSmart)
@@ -865,6 +1087,11 @@ public sealed partial class NavigationPane : UserControl
         analyze.IsEnabled = !track.IsOnline && !track.IsCueTrack && !track.IsMissing;
         analyze.Click += async (s, e) => await Dialogs.QualityDialog.ShowAsync(XamlRoot, track);
         flyout.Items.Add(analyze);
+
+        var multi = new MenuFlyoutItem { Text = L.T("多选"), Icon = new FontIcon { Glyph = "" } };
+        ToolTipService.SetToolTip(multi, L.T("也可以按住 Ctrl 或 Shift 点击歌曲"));
+        multi.Click += (s, e) => EnterMultiSelect(track);
+        flyout.Items.Add(multi);
 
         var del = new MenuFlyoutItem { Text = L.T("从曲库移除"), Icon = new FontIcon { Glyph = "" } };
         del.Click += (s, e) =>
@@ -972,7 +1199,7 @@ public sealed partial class NavigationPane : UserControl
         if (choice == Dialogs.MissingChoice.Remove)
         {
             foreach (var t in missing) { Queue.Remove(t); TrackRemoved?.Invoke(this, t); }
-            lib.RemoveTracks(missing);
+            lib.RemoveTracks(missing, exclude: false);
         }
         else if (choice == Dialogs.MissingChoice.Relocate)
         {
@@ -1231,6 +1458,7 @@ public sealed partial class NavigationPane : UserControl
     {
         if (e.ClickedItem is PlaylistEntry entry)
         {
+            ExitMultiSelect(refresh: false);
             _openPlaylist = entry.Name;
             _openIsSmart = entry.IsSmart;
             BeginStagger();
@@ -1240,6 +1468,7 @@ public sealed partial class NavigationPane : UserControl
 
     private void PlaylistBackBtn_Click(object sender, RoutedEventArgs e)
     {
+        ExitMultiSelect(refresh: false);
         if (_currentTab == "albums")
         {
             _openAlbum = null;
