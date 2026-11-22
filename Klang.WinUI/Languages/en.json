@@ -685,6 +685,15 @@
     "双语歌词把原文和翻译认反时使用，按歌曲记住": "Use when bilingual lyrics show the translation as the original. Remembered per song.",
     "当前歌词没有同一时间写成两行的双语歌词": "The current lyrics have no bilingual lines written as two lines with the same time",
     "已对调原文与翻译": "Original and translation swapped",
-    "已恢复原文与翻译": "Original and translation restored"
+    "已恢复原文与翻译": "Original and translation restored",
+    "播放 MV": "Play MV",
+    "这首歌没有 MV": "This song has no MV",
+    "播放 / 暂停 (空格)": "Play / pause (Space)",
+    "退出全屏": "Exit full screen",
+    "静音": "Mute",
+    "关闭 MV (Esc)": "Close MV (Esc)",
+    "画质": "Quality",
+    "MV 播放失败：": "MV playback failed: ",
+    "没有找到这首歌的 MV，或暂时无法获取（可能需要登录）。": "No MV was found for this song, or it can't be loaded right now (you may need to sign in)."
   }
 }

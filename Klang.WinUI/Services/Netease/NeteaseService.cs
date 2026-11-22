@@ -353,9 +353,13 @@ public sealed class NeteaseService : ICloudSource
             var album = s["al"] ?? s["album"];
             double ms = (double?)(s["dt"] ?? s["duration"]) ?? 0;
 
-            tracks.Add(MakeTrack(index++, id, (string?)s["name"] ?? L.T("未知曲目"),
+            var t = MakeTrack(index++, id, (string?)s["name"] ?? L.T("未知曲目"),
                 artist.Length > 0 ? artist : "未知歌手", (string?)album?["name"] ?? "", ms / 1000.0,
-                (string?)album?["picUrl"] ?? (string?)s["picUrl"] ?? ""));
+                (string?)album?["picUrl"] ?? (string?)s["picUrl"] ?? "");
+            // 歌曲详情 / 歌单 / 推荐里是 mv，搜索结果里是 mvid；没有 MV 时是 0
+            long mv = (long?)(s["mv"] ?? s["mvid"]) ?? 0;
+            t.MvId = mv.ToString();
+            tracks.Add(t);
         }
         return tracks;
     }
@@ -628,6 +632,53 @@ public sealed class NeteaseService : ICloudSource
 
     /// <summary>封面下载完成（可能在后台线程触发）。</summary>
     public event Action<TrackItem>? CoverCached;
+
+    #region MV
+
+    public bool SupportsMv => true;
+
+    public async Task EnsureMvIdAsync(TrackItem track, CancellationToken ct = default)
+    {
+        if (track.MvId.Length > 0) return;
+        if (!long.TryParse(track.CloudId, System.Globalization.NumberStyles.None, null, out var songId) || songId == 0) return;
+        try
+        {
+            var det = await _client.WeapiAsync("/weapi/v3/song/detail", new JsonObject { ["c"] = $"[{{\"id\":{songId}}}]" }, ct);
+            if ((int?)det?["code"] != 200) return;   // 查询失败时保持“不知道”，下次再查
+            long found = (long?)det?["songs"]?[0]?["mv"] ?? 0;
+            track.MvId = found.ToString();
+        }
+        catch (OperationCanceledException) { throw; }
+        catch { }
+    }
+
+    /// <summary>
+    /// 这首歌的 MV：可选画质和指定画质的播放地址（只认网易云的域名）。没有 MV 时返回 null。
+    /// 歌曲对象里没有 MV 编号时（比如从保存的队列恢复的）先查一次歌曲详情。
+    /// </summary>
+    public async Task<MvStream?> GetMvAsync(TrackItem track, int preferredHeight, CancellationToken ct = default)
+    {
+        await EnsureMvIdAsync(track, ct);
+        if (!long.TryParse(track.MvId, System.Globalization.NumberStyles.None, null, out var mvId) || mvId == 0) return null;
+
+        var info = await _client.WeapiAsync("/weapi/v1/mv/detail", new JsonObject { ["id"] = mvId }, ct);
+        var heights = (info?["data"]?["brs"]?.AsArray() ?? new JsonArray())
+            .Select(b => (int?)b?["br"] ?? 0).Where(h => h is > 0 and <= 4320).Distinct().OrderByDescending(h => h).ToList();
+        string title = (string?)info?["data"]?["name"] ?? track.Title;
+
+        // 选不超过偏好的最高画质；没有就用最低的
+        int want = heights.FirstOrDefault(h => h <= preferredHeight);
+        if (want == 0) want = heights.Count > 0 ? heights[^1] : preferredHeight;
+        var res = await _client.WeapiAsync("/weapi/song/enhance/play/mv/url", new JsonObject { ["id"] = mvId, ["r"] = want }, ct);
+        string? url = (string?)res?["data"]?["url"];
+        if ((int?)res?["code"] != 200 || !NetGuard.IsNeteaseUrl(url)) return null;
+        int actual = (int?)res?["data"]?["r"] ?? want;
+        // 未登录等情况下接口只给低画质：列表里只保留实际拿得到的及以下
+        if (heights.Count == 0) heights.Add(actual);
+        return new MvStream(url!, actual, heights, title);
+    }
+
+    #endregion
 
     #region 动态封面
 

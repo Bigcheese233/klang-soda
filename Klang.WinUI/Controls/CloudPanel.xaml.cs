@@ -387,6 +387,28 @@ public sealed partial class CloudPanel : UserControl
         if (e.ClickedItem is TrackItem t) TrackInvoked?.Invoke(_tracks.ToList(), t);
     }
 
+    /// <summary>要求播放某首歌的 MV。</summary>
+    public event Action<TrackItem>? MvRequested;
+
+    private void TrackRow_ContextRequested(UIElement sender, Microsoft.UI.Xaml.Input.ContextRequestedEventArgs args)
+    {
+        if (sender is not FrameworkElement { DataContext: TrackItem t } fe) return;
+        var flyout = new MenuFlyout();
+        var play = new MenuFlyoutItem { Text = L.T("播放"), Icon = new FontIcon { Glyph = "" } };
+        play.Click += (s, e) => TrackInvoked?.Invoke(_tracks.ToList(), t);
+        flyout.Items.Add(play);
+        if (Svc.SupportsMv)
+        {
+            var mv = new MenuFlyoutItem { Text = L.T("播放 MV"), Icon = new FontIcon { Glyph = "" }, IsEnabled = t.MvId != "0" };
+            if (!mv.IsEnabled) ToolTipService.SetToolTip(mv, L.T("这首歌没有 MV"));
+            mv.Click += (s, e) => MvRequested?.Invoke(t);
+            flyout.Items.Add(mv);
+        }
+        if (args.TryGetPosition(fe, out var pt)) flyout.ShowAt(fe, new Microsoft.UI.Xaml.Controls.Primitives.FlyoutShowOptions { Position = pt });
+        else flyout.ShowAt(fe);
+        args.Handled = true;
+    }
+
     /// <summary>高亮正在播放的云端曲目。</summary>
     public void SetCurrentTrack(TrackItem? track)
     {

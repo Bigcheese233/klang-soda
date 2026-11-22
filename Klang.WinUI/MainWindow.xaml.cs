@@ -64,6 +64,15 @@ public sealed partial class MainWindow : Window
         ((FrameworkElement)Content).ActualThemeChanged += (s, e) => UpdateRail(_railTab);
         StageLyricsControl.CalibrationPicked += StageLyricsControl_CalibrationPicked;
         ImmersiveLayer.CloseRequested += (s, e) => CloseImmersive();
+        MvLayer.CloseRequested += (s, e) => CloseMv(resume: true);
+        LeftNavPane.MvRequested += (s, t) => PlayMv(t);
+        StageCoverCard.MvRequested += (s, e) => { if (_currentTrack != null) PlayMv(_currentTrack); };
+        MvLayer.FullscreenRequested += (s, e) =>
+        {
+            if (AppWindow.Presenter.Kind == AppWindowPresenterKind.FullScreen) { ExitFullscreen(); _mvSetFullscreen = false; }
+            else { EnterFullscreen(); _mvSetFullscreen = true; }
+            UpdateMvCaptionInset();
+        };
         Activated += (s, e) => { if (e.WindowActivationState == WindowActivationState.Deactivated) ImmersiveLayer.OnWindowDeactivated(); };
         ImmersiveLayer.SeekRequested += (s, t) => AudioEngineService.Instance.Seek(Math.Max(0, t - _lyricOffset));
         ImmersiveLayer.VolumeChanged += (s, v) => BottomTransportBar.SetVolume(v);
@@ -533,6 +542,7 @@ public sealed partial class MainWindow : Window
 
     private void PlayTrack(TrackItem track, bool autoPlay = true)
     {
+        if (MvLayer.IsOpen) CloseMv(resume: false);   // 切到别的歌（媒体键、托盘菜单等）：关掉 MV，不再恢复原来的歌
         CrashReporter.Note($"{(autoPlay ? "播放" : "载入")}：{track.Artist} - {track.Title}" +
             (track.IsOnline ? $"（{Services.Cloud.CloudSources.For(track)?.DisplayName ?? track.CloudSource}）" :$"（{System.IO.Path.GetExtension(track.FilePath)} {track.SampleRate}Hz/{track.BitDepth}bit）") +
             (_adoptingMix ? " 混音接入" : ""));
@@ -566,6 +576,7 @@ public sealed partial class MainWindow : Window
         track.IsCurrent = true;
 
         StageCoverCard.UpdateTrack(track);
+        UpdateMvButton(track);
         LoadDynamicCover(track);
         UpdateTrayTip();
         UpdateNarrowHeader(track);
@@ -1103,6 +1114,8 @@ public sealed partial class MainWindow : Window
 
     private void TogglePlayPause()
     {
+        // MV 播放中：系统媒体键 / 托盘菜单的播放暂停作用于 MV
+        if (MvLayer.IsOpen) { MvLayer.TogglePlayPause(); return; }
         var engine = AudioEngineService.Instance;
         if (_currentTrack != null && !engine.HasSource)
         {
@@ -1169,6 +1182,7 @@ public sealed partial class MainWindow : Window
 
     private void PlayNext()
     {
+        if (MvLayer.IsOpen) CloseMv(resume: false);
         TrackItem? next; string? reason; bool byRoam;
         if (_preChosenNext != null)
         {
@@ -1321,6 +1335,7 @@ public sealed partial class MainWindow : Window
 
     private void PlayPrev()
     {
+        if (MvLayer.IsOpen) CloseMv(resume: false);
         var tracks = LeftNavPane.Queue;
         if (tracks.Count == 0) return;
 
@@ -1395,7 +1410,16 @@ public sealed partial class MainWindow : Window
         if (key == VirtualKey.F11)
         {
             ToggleFullscreen();
+            if (MvLayer.IsOpen) UpdateMvCaptionInset();
             e.Handled = true;
+            return;
+        }
+        // MV 播放层打开时：Esc 关闭、空格暂停 / 继续；方向键交给播放控制条，其余快捷键不响应（底下的播放器让出了声卡）
+        if (MvLayer.IsOpen)
+        {
+            if (key == VirtualKey.Escape) { CloseMv(resume: true); e.Handled = true; }
+            else if (key == VirtualKey.Space && !typing) { MvLayer.TogglePlayPause(); e.Handled = true; }
+            else if (key is not (VirtualKey.Left or VirtualKey.Right or VirtualKey.Up or VirtualKey.Down or VirtualKey.Tab or VirtualKey.Enter)) e.Handled = true;
             return;
         }
         if (key == VirtualKey.Escape && GalleryLayer.Visibility == Visibility.Visible)
@@ -1925,6 +1949,56 @@ public sealed partial class MainWindow : Window
     }
 
     private bool _immersiveSetFullscreen;
+
+    // ---------------- MV ----------------
+
+    private bool _mvSetFullscreen, _mvResumePlay;
+
+    /// <summary>
+    /// 播放这首歌的 MV：暂停当前的歌并让出声卡（独占模式下普通暂停仍占着设备，MV 会没声音），
+    /// MV 用它自己的声音播放；关闭后回到原来的歌和位置。
+    /// </summary>
+    public async void PlayMv(TrackItem track)
+    {
+        var source = Services.Cloud.CloudSources.For(track);
+        if (source == null || !source.SupportsMv || MvLayer.IsOpen) return;
+        CrashReporter.Note($"播放 MV：{track.Artist} - {track.Title}");
+        if (ImmersiveLayer.IsOpen) CloseImmersive();
+        if (GalleryLayer.Visibility == Visibility.Visible) CloseGallery();
+        _mvResumePlay = AudioEngineService.Instance.IsPlaying;
+        UpdateMvCaptionInset();
+        MvLayer.Open(track, source);
+        await AudioEngineService.Instance.SuspendOutputAsync();
+    }
+
+    /// <summary>MV 播放层的全屏按钮图标跟随窗口当前是否全屏。</summary>
+    private void UpdateMvCaptionInset()
+    {
+        double scale = Content?.XamlRoot?.RasterizationScale ?? 1.0;
+        double titleBar = AppWindow.TitleBar.Height > 0 ? AppWindow.TitleBar.Height / scale : 48;
+        MvLayer.SetFullscreenState(AppWindow.Presenter.Kind == AppWindowPresenterKind.FullScreen, titleBar);
+    }
+
+    /// <summary>封面上的 MV 按钮：当前歌曲有 MV 才显示；还不知道有没有时（从保存的队列恢复的）先查一下。</summary>
+    private async void UpdateMvButton(TrackItem track)
+    {
+        var source = Services.Cloud.CloudSources.For(track);
+        bool supported = track.IsOnline && source?.SupportsMv == true;
+        StageCoverCard.SetMvAvailable(supported && track.HasMv);
+        if (!supported || track.MvId.Length > 0) return;
+        try { await source!.EnsureMvIdAsync(track); } catch { return; }
+        if (_currentTrack == track) StageCoverCard.SetMvAvailable(track.HasMv);
+    }
+
+    private void CloseMv(bool resume)
+    {
+        if (!MvLayer.IsOpen) return;
+        MvLayer.Close();
+        if (_mvSetFullscreen) { ExitFullscreen(); _mvSetFullscreen = false; }
+        var engine = AudioEngineService.Instance;
+        if (resume && engine.IsSuspended) engine.ResumeOutput(_mvResumePlay);
+        else engine.ForgetSuspended();
+    }
 
     private void ImmersiveBtn_Click(object sender, RoutedEventArgs e) => ToggleImmersive();
 

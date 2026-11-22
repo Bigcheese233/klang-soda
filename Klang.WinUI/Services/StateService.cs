@@ -166,7 +166,8 @@ public class AppState
     public bool AutoCheckUpdate { get; set; } = true;       // 启动后自动检查 GitHub 上的新版本（只读公开的发布列表）
     public string SkippedUpdateVersion { get; set; } = "";  // 用户选了“跳过此版本”的版本号，自动检查时不再提示它
     public string CloseAction { get; set; } = "ask";        // 点窗口关闭按钮：ask 询问 | tray 最小化到托盘 | exit 退出
-    public bool DynamicCover { get; set; } = true;          // 云端歌曲有动态封面时在封面上播放（网易云，需要登录）
+    public bool DynamicCover { get; set; } = true;
+    public int MvQuality { get; set; } = 1080;              // MV 偏好画质（像素高度），没有这一档时用不超过它的最高画质          // 云端歌曲有动态封面时在封面上播放（网易云，需要登录）
     public int NeteaseCacheLimitMb { get; set; } = 2048;   // 云端缓存上限（每个来源各自计算）
 
     // QQ 音乐：登录凭证（整段登录结果）用 DPAPI 加密后保存

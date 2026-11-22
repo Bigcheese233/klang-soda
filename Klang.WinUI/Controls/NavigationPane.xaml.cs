@@ -152,10 +152,14 @@ public sealed partial class NavigationPane : UserControl
             TrackSelected?.Invoke(this, track);
         };
         CloudView.CoverReady += t => CloudCoverReady?.Invoke(this, t);
+        CloudView.MvRequested += t => MvRequested?.Invoke(this, t);
     }
 
     /// <summary>云端曲目的封面缓存完成。</summary>
     public event EventHandler<TrackItem>? CloudCoverReady;
+
+    /// <summary>要求播放某首云端歌曲的 MV（云端列表的 MV 标记 / 右键菜单、曲库列表的右键菜单）。</summary>
+    public event EventHandler<TrackItem>? MvRequested;
 
     /// <summary>用户调整 / 恢复了这些曲目的封面。</summary>
     public event EventHandler<IReadOnlyList<TrackItem>>? CoversAdjusted;
@@ -1087,6 +1091,13 @@ public sealed partial class NavigationPane : UserControl
         analyze.IsEnabled = !track.IsOnline && !track.IsCueTrack && !track.IsMissing;
         analyze.Click += async (s, e) => await Dialogs.QualityDialog.ShowAsync(XamlRoot, track);
         flyout.Items.Add(analyze);
+
+        if (track.IsOnline && Services.Cloud.CloudSources.For(track)?.SupportsMv == true)
+        {
+            var mv = new MenuFlyoutItem { Text = L.T("播放 MV"), Icon = new FontIcon { Glyph = "" }, IsEnabled = track.MvId != "0" };
+            mv.Click += (s, e) => MvRequested?.Invoke(this, track);
+            flyout.Items.Add(mv);
+        }
 
         var multi = new MenuFlyoutItem { Text = L.T("多选"), Icon = new FontIcon { Glyph = "" } };
         ToolTipService.SetToolTip(multi, L.T("也可以按住 Ctrl 或 Shift 点击歌曲"));

@@ -116,6 +116,7 @@ public class AudioEngineService : IDisposable
             return;
         }
 
+        _suspended = null;   // 开始播放别的（或恢复）：之前让出声卡时记下的位置作废
         Stop();
         _filePath = filePath;
         _segStart = Math.Max(0, segmentStart);
@@ -143,6 +144,35 @@ public class AudioEngineService : IDisposable
     }
 
     private string? _filePath;
+
+    // ---- 让出声卡（播放 MV 时）：独占模式下普通的暂停仍然占着设备（见 Pause），MV 会没有声音，所以要完全停掉 ----
+    private (string Path, double Start, double End, double Pos)? _suspended;
+
+    /// <summary>当前是否让出了声卡（等待 <see cref="ResumeOutput"/>）。</summary>
+    public bool IsSuspended => _suspended != null;
+
+    /// <summary>记下当前曲目和位置，停止播放并释放输出设备。</summary>
+    public async System.Threading.Tasks.Task SuspendOutputAsync()
+    {
+        if (_audioFileReader == null || string.IsNullOrEmpty(_filePath) || _suspended != null) return;
+        _suspended = (_filePath, _segStart, _segEnd, CurrentTime);
+        CrashReporter.Note("让出音频输出（播放 MV）");
+        await FadeOutAndStopAsync();
+    }
+
+    /// <summary>恢复 <see cref="SuspendOutputAsync"/> 之前的曲目和位置；play = 是否接着播放。</summary>
+    public void ResumeOutput(bool play)
+    {
+        if (_suspended is not { } s) return;
+        _suspended = null;
+        Play(s.Path, s.Start, s.End);
+        if (!HasSource) return;
+        if (s.Pos > 0.05) Seek(s.Pos);
+        if (!play) Pause();
+    }
+
+    /// <summary>不恢复了（比如让出期间用户换了别的歌）。</summary>
+    public void ForgetSuspended() => _suspended = null;
 
     /// <summary>输出设备 / 独占模式改了之后，在当前位置无缝重开输出（保持播放或暂停状态）。</summary>
     public void ReopenOutput() => ReopenOutput(IsPlaying);

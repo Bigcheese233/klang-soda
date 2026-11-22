@@ -25,6 +25,9 @@ public sealed class CloudPlaylist
 
 public enum QrLoginState { Waiting, Scanned, Expired, Success, Error }
 
+/// <summary>一个 MV 的播放地址：Height = 这个地址的画质（像素高度），Heights = 可选的画质（从高到低）。</summary>
+public sealed record MvStream(string Url, int Height, IReadOnlyList<int> Heights, string Title);
+
 /// <summary>
 /// 一个云端音乐来源（网易云等）。Klang 的播放、缓存、队列和界面只通过这个接口和平台打交道，
 /// 接入新平台只需要再写一份实现，并在 <see cref="CloudSources"/> 里登记。
@@ -72,6 +75,15 @@ public interface ICloudSource
     Task<List<TrackItem>> GetPlaylistTracksAsync(string playlistId);
     Task<List<TrackItem>> SearchAsync(string keyword, int limit = 50);
     Task<LyricBundle> GetLyricsAsync(string cloudId, CancellationToken ct = default);
+
+    /// <summary>MV 的播放地址和可选画质（高度，像素）；没有 MV 或不支持时返回 null。</summary>
+    Task<MvStream?> GetMvAsync(TrackItem track, int preferredHeight, CancellationToken ct = default) => Task.FromResult<MvStream?>(null);
+
+    /// <summary>这个平台能不能播放 MV（决定菜单里是否出现“播放 MV”）。</summary>
+    bool SupportsMv => false;
+
+    /// <summary>曲目还不知道有没有 MV 时（MvId 为空）查一下，结果写进 track.MvId。</summary>
+    Task EnsureMvIdAsync(TrackItem track, CancellationToken ct = default) => Task.CompletedTask;
 
     /// <summary>动态封面（短视频，静音循环播放），下载到缓存后返回本地路径；没有或不支持时返回 null。</summary>
     Task<string?> GetDynamicCoverAsync(string cloudId, CancellationToken ct = default) => Task.FromResult<string?>(null);

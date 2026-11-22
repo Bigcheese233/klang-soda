@@ -110,6 +110,27 @@
                             </Grid>
                         </Border>
 
+                        <!-- 当前歌曲有 MV 时：右上角的 MV 按钮 -->
+                        <Button
+                            x:Name="MvButton"
+                            Margin="0,10,10,0"
+                            Padding="8,3,8,3"
+                            HorizontalAlignment="Right"
+                            VerticalAlignment="Top"
+                            Canvas.ZIndex="2"
+                            AutomationProperties.Name="播放 MV"
+                            Background="#99000000"
+                            BorderThickness="0"
+                            Click="MvButton_Click"
+                            CornerRadius="6"
+                            ToolTipService.ToolTip="播放 MV"
+                            Visibility="Collapsed">
+                            <StackPanel Orientation="Horizontal" Spacing="4">
+                                <FontIcon FontSize="11" Foreground="White" Glyph="&#xE714;" />
+                                <TextBlock FontSize="11" FontWeight="Bold" Foreground="White" Text="MV" />
+                            </StackPanel>
+                        </Button>
+
                         <!-- 鼠标悬停时的高光：圆心跟着鼠标走 -->
                         <Border
                             x:Name="TiltShine"

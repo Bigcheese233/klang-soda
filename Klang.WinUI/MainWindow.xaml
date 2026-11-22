@@ -304,5 +304,10 @@
             x:Name="ImmersiveLayer"
             Grid.RowSpan="3"
             Visibility="Collapsed" />
+
+        <!-- MV 播放层（覆盖整个窗口） -->
+        <controls:MvPlayerView
+            x:Name="MvLayer"
+            Grid.RowSpan="3" />
     </Grid>
 </Window>

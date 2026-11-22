@@ -208,6 +208,10 @@ public class TrackItem : System.ComponentModel.INotifyPropertyChanged
     public string CoverUrl { get; set; } = string.Empty;
     public bool IsOnline => CloudId.Length > 0;
 
+    /// <summary>云端平台上这首歌的 MV 编号：空 = 不知道（比如从保存的队列恢复的），"0" = 确认没有 MV。</summary>
+    public string MvId { get; set; } = string.Empty;
+    public bool HasMv => MvId.Length > 0 && MvId != "0";
+
     /// <summary>ReplayGain 标签（dB / 峰值），没有标签时为 null。</summary>
     public double? ReplayGainDb { get; set; }
     public double? ReplayPeak { get; set; }

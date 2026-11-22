@@ -685,6 +685,15 @@
     "双语歌词把原文和翻译认反时使用，按歌曲记住": "Bruges, når tosprogede sangtekster viser oversættelsen som originalen. Huskes for hver sang.",
     "当前歌词没有同一时间写成两行的双语歌词": "Den aktuelle sangtekst har ingen tosprogede linjer skrevet som to linjer med samme tidspunkt",
     "已对调原文与翻译": "Original og oversættelse er byttet om",
-    "已恢复原文与翻译": "Original og oversættelse er gendannet"
+    "已恢复原文与翻译": "Original og oversættelse er gendannet",
+    "播放 MV": "Afspil musikvideo",
+    "这首歌没有 MV": "Denne sang har ingen musikvideo",
+    "播放 / 暂停 (空格)": "Afspil / pause (mellemrum)",
+    "退出全屏": "Afslut fuld skærm",
+    "静音": "Slå lyd fra",
+    "关闭 MV (Esc)": "Luk musikvideo (Esc)",
+    "画质": "Kvalitet",
+    "MV 播放失败：": "Afspilning af musikvideo mislykkedes: ",
+    "没有找到这首歌的 MV，或暂时无法获取（可能需要登录）。": "Der blev ikke fundet en musikvideo til denne sang, eller den kan ikke hentes lige nu (du skal måske logge ind)."
   }
 }

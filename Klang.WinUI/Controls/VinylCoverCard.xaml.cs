@@ -455,6 +455,14 @@ public sealed partial class VinylCoverCard : UserControl
         }
     }
 
+    /// <summary>点了封面右上角的 MV 按钮。</summary>
+    public event EventHandler? MvRequested;
+
+    /// <summary>当前歌曲是否有 MV（决定是否显示 MV 按钮）。</summary>
+    public void SetMvAvailable(bool available) => MvButton.Visibility = available ? Visibility.Visible : Visibility.Collapsed;
+
+    private void MvButton_Click(object sender, RoutedEventArgs e) => MvRequested?.Invoke(this, EventArgs.Empty);
+
     /// <summary>动态封面：本地视频路径（没有时为 null）和音乐是否在播放。</summary>
     public void SetDynamicCover(string? path, bool playing) => DynamicCover.Set(path, playing);
 

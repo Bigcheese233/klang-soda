@@ -221,6 +221,7 @@
                 Padding="8,0,8,0"
                 Background="Transparent"
                 ColumnSpacing="12"
+                ContextRequested="TrackRow_ContextRequested"
                 ToolTipService.ToolTip="{x:Bind FormatBadge}">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="40" />
