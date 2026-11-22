@@ -227,6 +227,29 @@ public sealed partial class LyricsStageControl : UserControl
         LoadLyricLines(LyricsService.Instance.LoadLyrics(audioFilePath));
     }
 
+    private bool _swapPairs;
+
+    /// <summary>
+    /// 本地双语歌词“原文与翻译对调”（按歌曲记住，由主窗口在换歌时设置）。
+    /// 只影响同一时间标签合并出来的行；改动后立即对当前歌词生效。
+    /// </summary>
+    public bool SwapPairs
+    {
+        get => _swapPairs;
+        set
+        {
+            if (_swapPairs == value) return;
+            _swapPairs = value;
+            if (Lyrics.Count == 0) return;
+            foreach (var l in Lyrics) l.SwapPair();
+            foreach (var r in _rows) r.WordRects = null;
+            Rebuild(snap: true);
+        }
+    }
+
+    /// <summary>当前歌词里有没有可以对调的双语行。</summary>
+    public bool HasPairedLines => Lyrics.Any(l => l.PairedTranslation);
+
     /// <summary>直接载入已解析好的歌词（云端歌词）。</summary>
     public void LoadLyricLines(IList<LyricLine> lines)
     {
@@ -235,6 +258,7 @@ public sealed partial class LyricsStageControl : UserControl
         Lyrics.Clear();
         foreach (var l in lines)
         {
+            if (_swapPairs) l.SwapPair();
             l.MainFontSize = _lyricFontSize;
             l.SubMode = _subMode;
             l.PropertyChanged += Line_PropertyChanged;

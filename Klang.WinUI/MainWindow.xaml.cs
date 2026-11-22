@@ -1764,6 +1764,30 @@ public sealed partial class MainWindow : Window
         _lyricOffset = 0;
         if (track != null && State.LyricOffsets.TryGetValue(track.Id, out var o)) _lyricOffset = o;
         UpdateOffsetLabel();
+        // 本地双语歌词的“原文与翻译对调”也按歌曲记住；在载入新歌词之前设好
+        StageLyricsControl.SwapPairs = track != null && State.LyricSwapTracks.Contains(track.Id);
+    }
+
+    private void LyricMenu_Opening(object? sender, object e)
+    {
+        SwapPairsItem.IsEnabled = StageLyricsControl.HasPairedLines;
+        SwapPairsItem.IsChecked = StageLyricsControl.SwapPairs;
+        ToolTipService.SetToolTip(SwapPairsItem, SwapPairsItem.IsEnabled
+            ? L.T("双语歌词把原文和翻译认反时使用，按歌曲记住")
+            : L.T("当前歌词没有同一时间写成两行的双语歌词"));
+    }
+
+    private void SwapPairsItem_Click(object sender, RoutedEventArgs e)
+    {
+        if (_currentTrack == null || !StageLyricsControl.HasPairedLines) return;
+        bool swap = !StageLyricsControl.SwapPairs;
+        StageLyricsControl.SwapPairs = swap;
+        State.LyricSwapTracks.Remove(_currentTrack.Id);
+        if (swap) State.LyricSwapTracks.Add(_currentTrack.Id);
+        StateService.Instance.RequestSave();
+        SyncImmersive();
+        _desktopLyricWindow?.UpdateLyrics(StageLyricsControl.Lyrics);
+        BottomTransportBar.UpdateLyricSnippet(swap ? L.T("已对调原文与翻译") : L.T("已恢复原文与翻译"));
     }
 
     private void SetLyricOffset(double v)

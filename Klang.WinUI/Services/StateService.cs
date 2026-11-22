@@ -135,6 +135,7 @@ public class AppState
     public int WasapiLatencyMs { get; set; } = 50;
     public bool WasapiExclusive { get; set; }               // WASAPI 独占模式：按文件原采样率 / 位深直接驱动声卡
     public bool BypassDsp { get; set; }                     // 绕过全部音效（均衡 / 空间 / 混响 / 限幅），纯净直通
+    public List<string> LyricSwapTracks { get; set; } = new();          // 本地双语歌词需要“原文与翻译对调”的歌曲 Id
     public Dictionary<string, double> LyricOffsets { get; set; } = new();   // 每首歌的歌词时间偏移（秒）
     public double PlaybackRate { get; set; } = 1.0;
     public string SelectedDeviceId { get; set; } = "default";
@@ -256,6 +257,7 @@ public class StateService
                     state.SmartPlaylists ??= new();
                     state.Roam ??= new();
                     state.LyricOffsets ??= new();
+                    state.LyricSwapTracks ??= new();
                     state.Roam.Stats ??= new();
                     state.Roam.Transitions ??= new();
                     State = state;
