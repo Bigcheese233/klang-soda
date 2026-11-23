@@ -287,6 +287,28 @@ public sealed partial class SettingsDialog : ContentDialog
 
     private UpdateInfo? _update;
 
+    // ---- 彩蛋：3 秒内连点图标 5 次开关 ----
+    public static event Action<bool>? EasterEggChanged;
+    private int _logoTaps;
+    private DateTime _logoFirstTap;
+
+    private void AppLogo_Tapped(object sender, Microsoft.UI.Xaml.Input.TappedRoutedEventArgs e)
+    {
+        var now = DateTime.UtcNow;
+        if (_logoTaps == 0 || (now - _logoFirstTap).TotalSeconds > 3) { _logoTaps = 0; _logoFirstTap = now; }
+        if (++_logoTaps < 5)
+        {
+            if (sender is FrameworkElement el) UiAnimations.Bounce(el, 0.9f, 1.08f, 220);
+            return;
+        }
+        _logoTaps = 0;
+        State.EasterEgg = !State.EasterEgg;
+        StateService.Instance.RequestSave();
+        AppVersionText.Text = State.EasterEgg ? L.T("发现彩蛋：看看封面上面 ♪") : L.T("彩蛋已关闭");
+        if (sender is FrameworkElement fe) UiAnimations.Spin(fe);
+        EasterEggChanged?.Invoke(State.EasterEgg);
+    }
+
     private void AutoCheckUpdateSwitch_Toggled(object sender, RoutedEventArgs e)
     {
         if (_loading) return;

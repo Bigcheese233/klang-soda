@@ -163,6 +163,7 @@ public class AppState
     public string NeteaseNickname { get; set; } = "";
     public string NeteaseAvatarUrl { get; set; } = "";
     public string NeteaseQuality { get; set; } = "lossless";
+    public bool EasterEgg { get; set; } = false;            // 彩蛋：封面上边缘坐着的小人（关于页连点图标 5 次开关）
     public bool AutoCheckUpdate { get; set; } = true;       // 启动后自动检查 GitHub 上的新版本（只读公开的发布列表）
     public string SkippedUpdateVersion { get; set; } = "";  // 用户选了“跳过此版本”的版本号，自动检查时不再提示它
     public string CloseAction { get; set; } = "ask";        // 点窗口关闭按钮：ask 询问 | tray 最小化到托盘 | exit 退出

@@ -455,6 +455,12 @@ public sealed partial class VinylCoverCard : UserControl
         }
     }
 
+    /// <summary>彩蛋：封面上边缘的小人是否出现。</summary>
+    public void SetEasterEggVisible(bool visible) => EggSitter.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
+
+    /// <summary>彩蛋小人跟着音乐：是否在播放、当前歌曲的 BPM（0 = 不知道）。</summary>
+    public void UpdateEasterEgg(bool playing, double bpm) => EggSitter.SetPlaying(playing, bpm);
+
     /// <summary>点了封面右上角的 MV 按钮。</summary>
     public event EventHandler? MvRequested;
 

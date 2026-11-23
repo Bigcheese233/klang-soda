@@ -164,6 +164,7 @@ public sealed partial class MainWindow : Window
             GalleryLayer.SetIsPlaying(isPlaying);
             StageCoverCard.SetPlaying(isPlaying);
             ApplyDynamicCover();
+            UpdateEasterEgg();
             _taskbarPlayerWindow?.UpdatePlayState(isPlaying);
             _media.SetPlaybackState(isPlaying, _currentTrack != null);
         };
@@ -371,6 +372,9 @@ public sealed partial class MainWindow : Window
         try
         {
             Dialogs.SettingsDialog.DynamicCoverSettingChanged += () => LoadDynamicCover(_currentTrack);
+            Dialogs.SettingsDialog.EasterEggChanged += on => { StageCoverCard.SetEasterEggVisible(on); UpdateEasterEgg(); };
+            StageCoverCard.SetEasterEggVisible(State.EasterEgg);
+            UpdateEasterEgg();
             foreach (var src in Services.Cloud.CloudSources.All)
             {
                 // 登录状态确认后（启动时恢复的云端歌曲常常早于这一步），补取当前歌曲的动态封面
@@ -577,6 +581,7 @@ public sealed partial class MainWindow : Window
 
         StageCoverCard.UpdateTrack(track);
         UpdateMvButton(track);
+        UpdateEasterEgg();
         LoadDynamicCover(track);
         UpdateTrayTip();
         UpdateNarrowHeader(track);
@@ -799,6 +804,13 @@ public sealed partial class MainWindow : Window
         {
             if (_currentTrack == track) BottomTransportBar.UpdateLyricSnippet(L.T("云端播放失败：") + ex.Message);
         }
+    }
+
+    /// <summary>彩蛋小人跟着当前歌曲的播放状态和 BPM 晃腿。</summary>
+    private void UpdateEasterEgg()
+    {
+        if (!State.EasterEgg) return;
+        StageCoverCard.UpdateEasterEgg(AudioEngineService.Instance.IsPlaying, _currentTrack?.Bpm ?? 0);
     }
 
     #region 启动时自动检查更新
