@@ -20,7 +20,7 @@ namespace Klang_WinUI.Controls;
 /// </summary>
 public sealed class EasterEggSitter : UserControl
 {
-    public const double ControlWidth = 140, ControlHeight = 200;
+    public const double ControlWidth = 152, ControlHeight = 200;
     /// <summary>控件里封面上边缘所在的高度（从顶部算）。</summary>
     public const double SeatY = 140;
     /// <summary>图片模式：图片宽度，以及图片里“座位”（坐着的横条上沿）所在的高度比例。</summary>
@@ -32,7 +32,7 @@ public sealed class EasterEggSitter : UserControl
     private bool _imageTried;
 
     private bool _playing;
-    private double _beatPeriod = 0.9;   // 腿晃一个来回的时间（秒）
+    private double _beatPeriod = 1.9;  // 腿晃一个来回的时间（秒）
     private double _phase, _swing;       // 晃腿相位、当前幅度（播放时渐强，暂停时渐弱）
     private double _hopT = -1;           // 点击后跳起的进度（秒），-1 = 没在跳
     private double _blinkAt = 2, _blinkT = -1;
@@ -49,8 +49,12 @@ public sealed class EasterEggSitter : UserControl
         IsTabStop = false;
         Content = _canvas;
         _canvas.Draw += OnDraw;
-        _canvas.CreateResources += (s, e) => { _image = null; _imageTried = false; };
-        Tapped += (s, e) => { if (_hopT < 0) _hopT = 0; Hook(); };
+        _canvas.CreateResources += (s, e) =>
+        {
+            _image = null; _imageTried = false;
+            _sheet?.Dispose(); _sheetBlink?.Dispose(); _sheet = _sheetBlink = null;
+        };
+        Tapped += (s, e) => { if (_hopT < 0) _hopT = 0; _heartT = 0; Hook(); };
         Loaded += (s, e) => Hook();
         Unloaded += (s, e) => Unhook();
         ToolTipService.SetToolTip(this, "♪");
@@ -60,7 +64,7 @@ public sealed class EasterEggSitter : UserControl
     public void SetPlaying(bool playing, double bpm)
     {
         _playing = playing;
-        if (bpm is > 40 and < 260) _beatPeriod = Math.Clamp(120.0 / bpm, 0.5, 1.6);
+        if (bpm is > 40 and < 260) _beatPeriod = Math.Clamp(240.0 / bpm, 1.2, 3.2);   // 四拍晃一个来回
         Hook();
     }
 
@@ -93,6 +97,9 @@ public sealed class EasterEggSitter : UserControl
         _swing += (target - _swing) * (1 - Math.Exp(-dt * 3));
         _phase += dt * 2 * Math.PI / _beatPeriod * (0.25 + 0.75 * _swing);
         if (_hopT >= 0) { _hopT += dt; if (_hopT > 0.55) _hopT = -1; }
+        if (_heartT >= 0) { _heartT += dt; if (_heartT > 1.3) _heartT = -1; }
+        _t += dt;
+        _hairPhase += dt * (1.1 + 2 * Math.PI / _beatPeriod * 0.5 * _swing);
 
         // 眨眼：每 2~6 秒一次
         _blinkAt -= dt;
@@ -105,7 +112,9 @@ public sealed class EasterEggSitter : UserControl
 
         _canvas.Invalidate();
         // 暂停、腿已经停稳、没在跳也没在眨眼时，降到每秒几帧（只为眨眼）
-        if (!_playing && _swing < 0.01 && _hopT < 0 && _blinkT < 0 && Math.Abs(_tiltTarget - _tilt) < 0.1) _frameAcc = -0.2;
+        // 图片模式暂停时头发和呼吸还在慢慢动，降到 20 帧左右
+        if (!_playing && _swing < 0.01 && _hopT < 0 && _heartT < 0 && _blinkT < 0 && Math.Abs(_tiltTarget - _tilt) < 0.1)
+            _frameAcc = _image != null ? -1.0 / 40 : -0.2;
     }
 
     private void OnDraw(CanvasControl sender, CanvasDrawEventArgs args)
@@ -119,7 +128,7 @@ public sealed class EasterEggSitter : UserControl
             _imageTried = true;
             _ = LoadImageAsync(sender);
         }
-        if (_image != null) { DrawImage(ds, hop + bob); return; }
+        if (_image != null) { DrawImage(sender, ds, hop); return; }
         DrawMascot(ds, (float)(hop + bob));
     }
 
@@ -135,17 +144,204 @@ public sealed class EasterEggSitter : UserControl
         catch (Exception ex) { App.LogError("EasterEgg", ex.Message); }
     }
 
-    /// <summary>用户提供的图片：座位（横条上沿）对齐封面上边缘，整体以座位为轴随节拍轻轻左右摇。</summary>
-    private void DrawImage(CanvasDrawingSession ds, double lift)
+    // ---------------- 图片模式：把图切成小格子分别位移，做出局部动作 ----------------
+    // 下面的坐标都是 miku.png 原图（384 x 547）里的像素位置，换图时要跟着改。
+    private const double RefW = 384;
+    private static readonly Vector2 NeckPivot = new(188, 190);   // 歪头 / 点头绕这里转
+    private static readonly Vector2 KneePivot = new(122, 372);   // 小腿绕这里摆
+    private const double SeatRefY = 390;                          // 坐着的位置（大腿下沿）
+    // 眨眼：盖住两只眼睛的椭圆（中心、半径）和闭眼的弧线
+    private static readonly (Vector2 C, Vector2 R, Vector2 A, Vector2 C1, Vector2 C2, Vector2 B)[] Eyes =
     {
+        (new(150, 134), new(20, 20), new(132, 134), new(140, 146), new(158, 146), new(166, 133)),
+        (new(216, 123), new(23, 23), new(196, 124), new(206, 136), new(227, 136), new(237, 122)),
+    };
+    private static readonly Color FaceSkin = Color.FromArgb(255, 254, 235, 223);
+
+    private CanvasRenderTarget? _sheet, _sheetBlink;   // 按显示分辨率缩好的图（睁眼 / 闭眼）
+    private float _sheetDpi;
+    private double _t;                                  // 总时间（头发飘、呼吸）
+    private double _hairPhase;
+    private double _heartT = -1;                        // 点击后飘起的小爱心
+    private Vector2[] _grid = Array.Empty<Vector2>();
+
+    private void EnsureSheets(CanvasControl sender)
+    {
+        float scale = sender.Dpi / 96f;
+        if (_sheet != null && Math.Abs(_sheetDpi - scale) < 0.01f) return;
+        _sheet?.Dispose(); _sheetBlink?.Dispose();
+        _sheetDpi = scale;
         var img = _image!;
-        float w = (float)ImageWidth, h = (float)(img.Size.Height * ImageWidth / img.Size.Width);
+        float iw = (float)img.SizeInPixels.Width, ih = (float)img.SizeInPixels.Height;
+        int pw = (int)Math.Round(ImageWidth * scale), ph = (int)Math.Round(ih * pw / iw);
+
+        // 闭眼版：先在原图分辨率上用肤色盖住眼睛、画一道弯弯的闭眼线
+        using var closed = new CanvasRenderTarget(sender, iw, ih, 96);
+        using (var ds = closed.CreateDrawingSession())
+        {
+            ds.Clear(Colors.Transparent);
+            ds.DrawImage(img, new Windows.Foundation.Rect(0, 0, iw, ih));
+            float k = (float)(iw / RefW);
+            foreach (var e in Eyes)
+            {
+                ds.FillEllipse(e.C * k, e.R.X * k, e.R.Y * k, FaceSkin);
+                using var pb = new CanvasPathBuilder(ds);
+                pb.BeginFigure(e.A * k);
+                pb.AddCubicBezier(e.C1 * k, e.C2 * k, e.B * k);
+                pb.EndFigure(CanvasFigureLoop.Open);
+                using var g = CanvasGeometry.CreatePath(pb);
+                ds.DrawGeometry(g, Color.FromArgb(255, 38, 38, 46), 4.2f * k,
+                    new CanvasStrokeStyle { StartCap = CanvasCapStyle.Round, EndCap = CanvasCapStyle.Round });
+            }
+        }
+        _sheet = Shrink(sender, img, pw, ph);
+        _sheetBlink = Shrink(sender, closed, pw, ph);
+    }
+
+    private static CanvasRenderTarget Shrink(CanvasControl sender, CanvasBitmap src, int pw, int ph)
+    {
+        var rt = new CanvasRenderTarget(sender, pw, ph, 96);
+        using var ds = rt.CreateDrawingSession();
+        ds.Clear(Colors.Transparent);
+        ds.DrawImage(src, new Windows.Foundation.Rect(0, 0, pw, ph),
+            new Windows.Foundation.Rect(0, 0, src.SizeInPixels.Width, src.SizeInPixels.Height), 1f, CanvasImageInterpolation.HighQualityCubic);
+        return rt;
+    }
+
+    private static double Smooth(double a, double b, double x)
+    {
+        double t = Math.Clamp((x - a) / (b - a), 0, 1);
+        return t * t * (3 - 2 * t);
+    }
+
+    /// <summary>原图坐标 (x, y) 处的位移（原图像素）：身体左右轻摇和呼吸、头跟着节拍点、双马尾飘、小腿晃。</summary>
+    private Vector2 Displace(double x, double y, double lean, double breathe, double headRad, double legRad, double hairAmp)
+    {
+        double dx = 0, dy = 0;
+        // 上半身以座位为轴左右轻摇，并随呼吸微微起伏
+        if (y < SeatRefY)
+        {
+            double up = (SeatRefY - y) / SeatRefY;
+            dx += lean * up;
+            dy -= breathe * up;
+        }
+        // 头：绕脖子转，越往下影响越小
+        double wh = 1 - Smooth(150, 205, y);
+        if (wh > 0)
+        {
+            double px = x - NeckPivot.X, py = y - NeckPivot.Y, c = Math.Cos(headRad) - 1, s = Math.Sin(headRad);
+            dx += (px * c - py * s) * wh;
+            dy += (px * s + py * c) * wh;
+        }
+        // 小腿：绕膝盖摆
+        double wl = Smooth(355, 395, y) * Smooth(40, 82, x) * (1 - Smooth(175, 205, x));
+        if (wl > 0)
+        {
+            double px = x - KneePivot.X, py = y - KneePivot.Y, c = Math.Cos(legRad) - 1, s = Math.Sin(legRad);
+            dx += (px * c - py * s) * wl;
+            dy += (px * s + py * c) * wl;
+        }
+        // 双马尾：两侧的头发，越往发梢摆得越多，像被风吹着一波一波地动
+        double left = 1 - Smooth(72, 100, x), right = Smooth(262, 292, x);
+        if ((left > 0 || right > 0) && y > 170)
+        {
+            double wv = Math.Pow(Math.Min(1, (y - 170) / 377), 1.5) * (1 - wl);
+            dx += wv * hairAmp * (left * Math.Sin(_hairPhase - y / 85) + right * Math.Sin(_hairPhase + 0.9 - y / 85));
+            dy += wv * hairAmp * 0.25 * (left + right) * Math.Cos(_hairPhase * 2 - y / 70);
+        }
+        return new Vector2((float)dx, (float)dy);
+    }
+
+    /// <summary>
+    /// 用户提供的图片：座位对齐封面上边缘。图切成小格子（Win2D sprite batch）逐格位移，
+    /// 所以身体能摇、头能点、头发能飘、腿能晃；还会眨眼，踩到节拍时轻轻一压。
+    /// </summary>
+    private void DrawImage(CanvasControl sender, CanvasDrawingSession ds, double lift)
+    {
+        EnsureSheets(sender);
+        var sheet = _blinkT >= 0 ? _sheetBlink! : _sheet!;
+        float pw = sheet.SizeInPixels.Width, ph = sheet.SizeInPixels.Height;
+        float w = (float)ImageWidth, h = (float)(ph * ImageWidth / pw);
         float left = (float)((ControlWidth - w) / 2), top = (float)(SeatY - h * ImageSeatFraction - lift);
-        float rock = (float)(Math.Sin(_phase) * 3 * _swing * Math.PI / 180);
-        ds.Transform = Matrix3x2.CreateRotation(rock, new Vector2((float)(ControlWidth / 2), (float)SeatY));
-        ds.DrawImage(img, new Windows.Foundation.Rect(left, top, w, h), new Windows.Foundation.Rect(0, 0, img.Size.Width, img.Size.Height),
-            1f, CanvasImageInterpolation.HighQualityCubic);
-        ds.Transform = Matrix3x2.Identity;
+
+        // _phase 每四拍转一圈
+        var basis = Matrix3x2.CreateScale(w / pw) * Matrix3x2.CreateTranslation(left, top);
+
+        double idle = 1 - _swing;
+        double lean = 7 * Math.Sin(_phase) * _swing + 1.6 * Math.Sin(_t * 0.5) * idle;
+        double breathe = 1.0 * (0.5 + 0.5 * Math.Sin(_t * 1.3));
+        double headDeg = _tilt * 0.45 + 3 * Math.Sin(_phase * 2 - 0.6) * _swing + (_hopT >= 0 ? 4 * Math.Sin(_hopT / 0.55 * Math.PI) : 0);
+        double legDeg = 6 * Math.Sin(_phase + 0.8) * _swing + 2.5 * Math.Sin(_t * 1.3) * idle;
+        double hairAmp = 6 + 10 * _swing;
+        double toRef = RefW / pw;   // 缩好的图 → 原图坐标
+
+        if (!CanvasSpriteBatch.IsSupported(sender.Device))
+        {
+            ds.Transform = basis;
+            ds.DrawImage(sheet);
+            ds.Transform = Matrix3x2.Identity;
+            return;
+        }
+        // 先算网格顶点的位移，每格按左上、右上、左下三个顶点做仿射变形，相邻格子的边能对上，不会裂开
+        const int cell = 5;
+        int nx = (int)Math.Ceiling(pw / cell) + 1, ny = (int)Math.Ceiling(ph / cell) + 1;
+        if (_grid.Length < nx * ny) _grid = new Vector2[nx * ny];
+        double hr = headDeg * Math.PI / 180, lr = legDeg * Math.PI / 180;
+        for (int j = 0; j < ny; j++)
+        for (int i = 0; i < nx; i++)
+        {
+            float gx = i * cell, gy = j * cell;
+            _grid[j * nx + i] = new Vector2(gx, gy) + Displace(gx * toRef, gy * toRef, lean, breathe, hr, lr, hairAmp) / (float)toRef;
+        }
+        using (var batch = ds.CreateSpriteBatch(CanvasSpriteSortMode.None, CanvasImageInterpolation.Linear, CanvasSpriteOptions.None))
+        {
+            for (int j = 0; j < ny - 1; j++)
+            for (int i = 0; i < nx - 1; i++)
+            {
+                int cx = i * cell, cy = j * cell;
+                if (cx >= pw || cy >= ph) continue;
+                Vector2 p00 = _grid[j * nx + i], ex = (_grid[j * nx + i + 1] - p00) / cell, ey = (_grid[(j + 1) * nx + i] - p00) / cell;
+                var m = new Matrix3x2(ex.X, ex.Y, ey.X, ey.Y, p00.X, p00.Y);
+                // 每格向外多取 1 像素，盖住仿射近似留下的细缝
+                float x0 = Math.Max(0, cx - 1), y0 = Math.Max(0, cy - 1);
+                float x1 = Math.Min(pw, cx + cell + 1), y1 = Math.Min(ph, cy + cell + 1);
+                batch.DrawFromSpriteSheet(sheet, Matrix3x2.CreateTranslation(x0 - cx, y0 - cy) * m * basis,
+                    new Windows.Foundation.Rect(x0, y0, x1 - x0, y1 - y0));
+            }
+        }
+
+        // 播放时头顶飘出小音符；点一下飘出小爱心
+        var head = Vector2.Transform(new Vector2((float)(250 / toRef), (float)(30 / toRef)), basis);
+        if (_swing > 0.5)
+        {
+            double t = (_phase / (2 * Math.PI)) % 2.0;
+            if (t < 1.2) DrawNote(ds, head.X + (float)(t * 8), head.Y - (float)(t * 18), (float)(1 - t / 1.2));
+        }
+        if (_heartT >= 0)
+        {
+            float a = (float)Math.Clamp(1.4 - _heartT / 0.9, 0, 1);
+            var hp = Vector2.Transform(new Vector2((float)(120 / toRef), (float)(20 / toRef)), basis);
+            DrawHeart(ds, hp.X - (float)(_heartT * 6), hp.Y - (float)(_heartT * 26), 1 + (float)Math.Min(1, _heartT * 4) * 0.2f, a);
+        }
+    }
+
+    private static void DrawNote(CanvasDrawingSession ds, float nx, float ny, float a)
+    {
+        var c = Color.FromArgb((byte)(230 * a), 57, 197, 187);
+        ds.FillEllipse(nx, ny + 7, 3.2f, 2.5f, c);
+        ds.DrawLine(nx + 2.8f, ny + 7, nx + 2.8f, ny - 3, c, 1.3f);
+        ds.DrawLine(nx + 2.8f, ny - 3, nx + 6.5f, ny - 1, c, 1.3f);
+    }
+
+    private static void DrawHeart(CanvasDrawingSession ds, float x, float y, float s, float a)
+    {
+        using var pb = new CanvasPathBuilder(ds);
+        pb.BeginFigure(x, y + 5 * s);
+        pb.AddCubicBezier(new Vector2(x - 8 * s, y - 1 * s), new Vector2(x - 4 * s, y - 7 * s), new Vector2(x, y - 3 * s));
+        pb.AddCubicBezier(new Vector2(x + 4 * s, y - 7 * s), new Vector2(x + 8 * s, y - 1 * s), new Vector2(x, y + 5 * s));
+        pb.EndFigure(CanvasFigureLoop.Closed);
+        using var g = CanvasGeometry.CreatePath(pb);
+        ds.FillGeometry(g, Color.FromArgb((byte)(235 * a), 255, 120, 150));
     }
 
     // ---------------- 原创 Q 版形象（Klang 吉祥物） ----------------

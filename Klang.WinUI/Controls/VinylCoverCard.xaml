@@ -69,7 +69,7 @@
                 <!-- 彩蛋：坐在封套上边缘的小人（封套上边缘在 y = 5，控件里的座位高度是 140） -->
                 <controls:EasterEggSitter
                     x:Name="EggSitter"
-                    Margin="20,-135,0,0"
+                    Margin="14,-135,0,0"
                     HorizontalAlignment="Left"
                     VerticalAlignment="Top"
                     Canvas.ZIndex="5"
