@@ -254,6 +254,9 @@ public static class L
                 Do(box, "Placeholder", box.PlaceholderText, s => box.PlaceholderText = s);
                 if (box.Header is string th) Do(box, "Header", th, s => box.Header = s);
                 break;
+            case PasswordBox pb:
+                Do(pb, "Placeholder", pb.PlaceholderText, s => pb.PlaceholderText = s);
+                break;
             case AutoSuggestBox asb:
                 Do(asb, "Placeholder", asb.PlaceholderText, s => asb.PlaceholderText = s);
                 break;

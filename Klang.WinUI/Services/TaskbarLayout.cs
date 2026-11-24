@@ -42,7 +42,10 @@ internal static class TaskbarLayout
         int gap = (int)Math.Ceiling(4 * ValidScale(scale));
         int start = bar.Left + margin, end = bar.Right - margin;
         var result = new List<ScreenRect>();
-        foreach (var item in occupied.Where(r => r.Intersects(bar)).OrderBy(r => r.Left))
+        // 横跨大半个任务栏的不是真正的按钮：开始菜单、搜索等弹出时，UIA 偶尔会临时报出一个铺满任务栏的容器，
+        // 把它当成占用会让所有空白瞬间消失、播放条被隐藏几秒。
+        int wide = (int)(bar.Width * 0.6);
+        foreach (var item in occupied.Where(r => r.Intersects(bar) && r.Width < wide).OrderBy(r => r.Left))
         {
             int left = Math.Max(start, item.Left - gap), right = Math.Min(end, item.Right + gap);
             if (right <= start || left >= end) continue;

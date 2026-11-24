@@ -86,6 +86,27 @@
                     </Border>
 
                     <Border Style="{StaticResource SettingCard}">
+                        <Grid ColumnSpacing="12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Spacing="2">
+                                <TextBlock FontWeight="Medium" Text="点击关闭按钮时" />
+                                <TextBlock FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                           Text="最小化到系统托盘后继续在后台播放，可以从托盘图标重新打开或退出。"
+                                           TextWrapping="Wrap" />
+                            </StackPanel>
+                            <ComboBox x:Name="CloseActionBox" Grid.Column="1" Width="160" VerticalAlignment="Center"
+                                      SelectionChanged="CloseActionBox_SelectionChanged">
+                                <ComboBoxItem Content="每次询问" Tag="ask" />
+                                <ComboBoxItem Content="最小化到托盘" Tag="tray" />
+                                <ComboBoxItem Content="退出程序" Tag="exit" />
+                            </ComboBox>
+                        </Grid>
+                    </Border>
+
+                    <Border Style="{StaticResource SettingCard}">
                         <Grid>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*" />
@@ -210,7 +231,7 @@
                                 </Grid.ColumnDefinitions>
                                 <StackPanel Spacing="2">
                                     <TextBlock FontWeight="Medium" Text="天气效果" />
-                                    <TextBlock FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="按所在城市的天气，在背景上叠加很淡的效果：下雨时玻璃蒙上一层雾气、布满水珠，不时有水珠滑落并擦出一道水路，下雪时有稀疏的雪花，阴天降低饱和度。" TextWrapping="Wrap" />
+                                    <TextBlock FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="按所在城市的天气，在背景上叠加很淡的效果：下雨时玻璃蒙上一层雾气、布满水珠，不时有水珠滑落并擦出一道水路，下雪时有稀疏的雪花，雷雨时远处偶尔有闪电，起雾时画面蒙上缓慢飘动的薄雾，阴天降低饱和度。" TextWrapping="Wrap" />
                                 </StackPanel>
                                 <ToggleSwitch
                                     x:Name="AmbientWeatherSwitch"
@@ -297,6 +318,29 @@
                                 OffContent="关"
                                 OnContent="开"
                                 Toggled="LyricWordMotionSwitch_Toggled" />
+                        </Grid>
+                    </Border>
+                    <Border Style="{StaticResource SettingCard}">
+                        <Grid ColumnSpacing="12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Spacing="2">
+                                <TextBlock FontWeight="Medium" Text="歌词帧率" />
+                                <TextBlock FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="歌词滚动和逐字高亮的刷新上限。调低可以减少显卡占用，适合笔记本省电；动画速度不受影响。" TextWrapping="Wrap" />
+                            </StackPanel>
+                            <ComboBox
+                                x:Name="LyricFrameRateBox"
+                                Grid.Column="1"
+                                Width="160"
+                                VerticalAlignment="Center"
+                                SelectionChanged="LyricFrameRateBox_SelectionChanged">
+                                <ComboBoxItem Content="跟随屏幕刷新率" Tag="0" />
+                                <ComboBoxItem Content="120 帧" Tag="120" />
+                                <ComboBoxItem Content="60 帧" Tag="60" />
+                                <ComboBoxItem Content="30 帧" Tag="30" />
+                            </ComboBox>
                         </Grid>
                     </Border>
                     <Border Style="{StaticResource SettingCard}">
@@ -560,7 +604,25 @@
                 <StackPanel Margin="0,0,12,0" Spacing="8">
                     <TextBlock FontSize="20" FontWeight="SemiBold" Text="网络与缓存" />
 
-                    <TextBlock Style="{StaticResource GroupTitle}" Text="网易云" />
+                    <TextBlock Style="{StaticResource GroupTitle}" Text="云端音乐" />
+                    <Border Style="{StaticResource SettingCard}">
+                        <Grid ColumnSpacing="12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Spacing="2">
+                                <TextBlock FontWeight="Medium" Text="动态封面" />
+                                <TextBlock FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="网易云歌曲带有动态封面时，在封面位置静音循环播放，随音乐暂停。需要登录网易云，视频会缓存到本地。" TextWrapping="Wrap" />
+                            </StackPanel>
+                            <ToggleSwitch
+                                x:Name="DynamicCoverSwitch"
+                                Grid.Column="1"
+                                OffContent="关"
+                                OnContent="开"
+                                Toggled="DynamicCoverSwitch_Toggled" />
+                        </Grid>
+                    </Border>
                     <Border Style="{StaticResource SettingCard}">
                         <StackPanel Spacing="8">
                             <TextBlock FontWeight="Medium" Text="音乐缓存" />
@@ -577,7 +639,7 @@
                                     VerticalAlignment="Center"
                                     FontSize="12"
                                     Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                    Text="缓存上限" />
+                                    Text="缓存上限（每个平台）" />
                                 <ComboBox
                                     x:Name="CacheLimitBox"
                                     Grid.Column="1"
@@ -611,7 +673,8 @@
                                 Width="56"
                                 Height="56"
                                 VerticalAlignment="Top"
-                                Source="ms-appx:///Assets/AppLogo.png" />
+                                Source="ms-appx:///Assets/AppLogo.png"
+                                Tapped="AppLogo_Tapped" />
                             <StackPanel Grid.Column="1" Spacing="3">
                                 <TextBlock FontSize="18" FontWeight="SemiBold" Text="Klang Soda" />
                                 <TextBlock FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}"
@@ -630,6 +693,24 @@
                     </Border>
 
                     <TextBlock Style="{StaticResource GroupTitle}" Text="更新" />
+                    <Border Style="{StaticResource SettingCard}">
+                        <Grid ColumnSpacing="12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Spacing="2">
+                                <TextBlock FontWeight="Medium" Text="启动时自动检查更新" />
+                                <TextBlock FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="打开 Klang Soda 后向 GitHub 查询是否有新版本，有新版本时提示，不会自动下载或安装。请求中不含任何个人信息。" TextWrapping="Wrap" />
+                            </StackPanel>
+                            <ToggleSwitch
+                                x:Name="AutoCheckUpdateSwitch"
+                                Grid.Column="1"
+                                OffContent="关"
+                                OnContent="开"
+                                Toggled="AutoCheckUpdateSwitch_Toggled" />
+                        </Grid>
+                    </Border>
                     <Border Style="{StaticResource SettingCard}">
                         <StackPanel Spacing="10">
                             <Grid ColumnSpacing="12">

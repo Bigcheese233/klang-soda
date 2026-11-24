@@ -9,12 +9,23 @@
     <Grid RowSpacing="6">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
+
+        <!-- 云端来源切换：接入了不止一个平台时才显示 -->
+        <ComboBox
+            x:Name="SourceBox"
+            HorizontalAlignment="Stretch"
+            FontSize="12"
+            SelectionChanged="SourceBox_SelectionChanged"
+            ToolTipService.ToolTip="云端来源"
+            Visibility="Collapsed" />
 
         <!-- 查看歌单 / 搜索结果时的返回条 -->
         <Grid
             x:Name="TracksHeader"
+            Grid.Row="1"
             ColumnSpacing="6"
             Visibility="Collapsed">
             <Grid.ColumnDefinitions>
@@ -39,15 +50,24 @@
                 TextTrimming="CharacterEllipsis" />
         </Grid>
 
-        <Grid Grid.Row="1">
+        <Grid Grid.Row="2">
             <!-- 未登录：二维码 / Cookie 登录 -->
             <ScrollViewer x:Name="LoginView" VerticalScrollBarVisibility="Auto">
                 <StackPanel Spacing="10" Padding="6,4,6,8">
                     <TextBlock
+                        x:Name="LoginTitleText"
                         HorizontalAlignment="Center"
                         FontSize="14"
                         FontWeight="SemiBold"
                         Text="登录网易云音乐" />
+                    <!-- 扫码方式（QQ / 微信）：来源支持多种时才显示 -->
+                    <ComboBox
+                        x:Name="QrModeBox"
+                        MinWidth="120"
+                        HorizontalAlignment="Center"
+                        FontSize="12"
+                        SelectionChanged="QrModeBox_SelectionChanged"
+                        Visibility="Collapsed" />
                     <Border
                         Width="168"
                         Height="168"
@@ -78,6 +98,7 @@
                         FontSize="12" />
 
                     <Expander
+                        x:Name="CookieExpander"
                         HorizontalAlignment="Stretch"
                         HorizontalContentAlignment="Stretch">
                         <!-- 侧栏很窄：标题允许换行，不再被截断 -->
@@ -89,12 +110,10 @@
                                 TextWrapping="Wrap" />
                         </Expander.Header>
                         <StackPanel Spacing="8">
-                            <TextBox
+                            <!-- Cookie 是登录凭据：用密码框，不在屏幕上明文显示 -->
+                            <PasswordBox
                                 x:Name="CookieBox"
-                                AcceptsReturn="True"
-                                Height="64"
-                                PlaceholderText="粘贴 MUSIC_U 或整段 Cookie"
-                                TextWrapping="Wrap" />
+                                PlaceholderText="粘贴 MUSIC_U 或整段 Cookie" />
                             <Button
                                 x:Name="CookieLoginBtn"
                                 Click="CookieLogin_Click"
@@ -202,6 +221,7 @@
                 Padding="8,0,8,0"
                 Background="Transparent"
                 ColumnSpacing="12"
+                ContextRequested="TrackRow_ContextRequested"
                 ToolTipService.ToolTip="{x:Bind FormatBadge}">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="40" />
@@ -221,7 +241,7 @@
                             FontSize="16"
                             Foreground="{ThemeResource TextFillColorTertiaryBrush}"
                             Glyph="&#xE8D6;" />
-                        <Image Source="{x:Bind CoverThumb, Mode=OneWay}" Stretch="UniformToFill" />
+                        <Image Source="{x:Bind CoverThumb, Mode=OneWay}" Stretch="UniformToFill" HorizontalAlignment="Center" VerticalAlignment="Center" />
                     </Grid>
                 </Border>
 

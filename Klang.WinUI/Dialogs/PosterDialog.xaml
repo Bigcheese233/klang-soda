@@ -35,7 +35,7 @@
                     HorizontalAlignment="Left"
                     CornerRadius="10"
                     Background="#22FFFFFF">
-                    <Image x:Name="PosterCover" Stretch="UniformToFill" />
+                    <Image x:Name="PosterCover" Stretch="UniformToFill" HorizontalAlignment="Center" VerticalAlignment="Center" />
                 </Border>
                 <TextBlock
                     x:Name="PosterLyric"

@@ -38,6 +38,20 @@ public class LyricLine : INotifyPropertyChanged
     /// <summary>逐字时间轴（增强 LRC / yrc）；没有则为 null。</summary>
     public List<LyricWord>? Words { get; set; }
 
+    /// <summary>翻译来自同一时间标签的另一行（本地双语歌词）：这类行可以手动“原文与翻译对调”。</summary>
+    public bool PairedTranslation { get; set; }
+
+    /// <summary>对调时和 Words 互换的逐字时间轴（另一行的；通常为 null）。</summary>
+    public List<LyricWord>? AltWords { get; set; }
+
+    /// <summary>原文与翻译对调（只对 <see cref="PairedTranslation"/> 的行有意义）。</summary>
+    public void SwapPair()
+    {
+        if (!PairedTranslation) return;
+        (Text, Sub) = (Sub, Text);
+        (Words, AltWords) = (AltWords, Words);
+    }
+
     private string _subMode = "trans";
     /// <summary>副行显示模式：trans 翻译 | roma 罗马音 | both 两者 | off 关闭。</summary>
     public string SubMode
@@ -158,7 +172,8 @@ public class LyricLine : INotifyPropertyChanged
     /// <summary>复制歌词内容（不含显示状态），供第二个歌词视图使用。</summary>
     public LyricLine CloneContent() => new()
     {
-        Index = Index, Time = Time, EndTime = EndTime, Text = Text, Sub = Sub, Roma = Roma, Words = Words
+        Index = Index, Time = Time, EndTime = EndTime, Text = Text, Sub = Sub, Roma = Roma, Words = Words,
+        PairedTranslation = PairedTranslation, AltWords = AltWords
     };
 
     public double TargetScale { get; set; } = 0.96;

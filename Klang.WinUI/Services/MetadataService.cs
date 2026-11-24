@@ -93,9 +93,13 @@ public sealed class MetadataService
 
     #region 匹配
 
+    // 去掉括号里的附注。曲目名来自文件标签，可能很长或括号不配对；用不回溯的引擎保证线性时间。
+    private static readonly Regex BracketRx = new(@"[\(\[（【][^\)\]）】]*[\)\]）】]", RegexOptions.NonBacktracking);
+    private static readonly Regex SpacedBracketRx = new(@"\s*[\(\[（【][^\)\]）】]*[\)\]）】]", RegexOptions.NonBacktracking);
+
     private static string Normalize(string s)
     {
-        s = Regex.Replace(s ?? "", @"[\(\[（【].*?[\)\]）】]", "");
+        s = BracketRx.Replace(s ?? "", "");
         s = Regex.Replace(s, @"[\s\-_·・,，.。!！?？'""“”]+", "");
         return s.ToLowerInvariant();
     }
@@ -103,7 +107,7 @@ public sealed class MetadataService
     /// <summary>从曲目推出搜索词；文件名常见 “歌手 - 歌名”，整串交给搜索即可。</summary>
     private static string Keyword(TrackItem t)
     {
-        var title = Regex.Replace(t.Title, @"\s*[\(\[（【].*?[\)\]）】]", "").Trim();
+        var title = SpacedBracketRx.Replace(t.Title, "").Trim();
         return t.Artist != UnknownArtist ? $"{title} {t.Artist}" : title;
     }
 
@@ -157,7 +161,7 @@ public sealed class MetadataService
             var m = await FindMatchAsync(t);
             if (m != null)
             {
-                t.MetaNeteaseId = m.NeteaseId;
+                t.MetaNeteaseId = m.CloudId;
                 if (t.Album == UnknownAlbum && !string.IsNullOrWhiteSpace(m.Album)) { t.Album = m.Album; changed = true; }
                 if (t.Artist == UnknownArtist && m.Artist != UnknownArtist) { t.Artist = m.Artist; changed = true; }
                 if (NeedsCover(t) && !string.IsNullOrEmpty(m.CoverUrl))
@@ -180,6 +184,7 @@ public sealed class MetadataService
 
     private async Task<string?> DownloadCoverAsync(TrackItem t, string url)
     {
+        if (!NetGuard.IsNeteaseUrl(url)) return null;
         try
         {
             var u = url.Contains('?') ? url : url + "?param=800y800";
@@ -196,7 +201,7 @@ public sealed class MetadataService
     }
 
     /// <summary>取在线歌词（本地没有歌词时用）：必要时先搜索匹配，返回 null 表示没找到。</summary>
-    public async Task<NeteaseService.LyricBundle?> FetchLyricsAsync(TrackItem t, CancellationToken ct)
+    public async Task<Cloud.LyricBundle?> FetchLyricsAsync(TrackItem t, CancellationToken ct)
     {
         if (!Enabled || t.IsOnline || t.IsCueTrack) return null;
         try
@@ -205,7 +210,7 @@ public sealed class MetadataService
             {
                 var m = await FindMatchAsync(t);
                 if (m == null) return null;
-                t.MetaNeteaseId = m.NeteaseId;
+                t.MetaNeteaseId = m.CloudId;
                 SaveLibraryOnUi();
             }
             ct.ThrowIfCancellationRequested();

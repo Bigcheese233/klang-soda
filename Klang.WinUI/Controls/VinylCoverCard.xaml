@@ -6,6 +6,7 @@
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:canvas="using:Microsoft.Graphics.Canvas.UI.Xaml"
+    xmlns:controls="using:Klang_WinUI.Controls"
     UseLayoutRounding="True"
     mc:Ignorable="d">
 
@@ -65,6 +66,15 @@
                             StrokeThickness="0.8" />
                     </Grid>
                 </Grid>
+                <!-- 彩蛋：坐在封套上边缘的小人（封套上边缘在 y = 5，控件里的座位高度是 140） -->
+                <controls:EasterEggSitter
+                    x:Name="EggSitter"
+                    Margin="14,-135,0,0"
+                    HorizontalAlignment="Left"
+                    VerticalAlignment="Top"
+                    Canvas.ZIndex="5"
+                    Visibility="Collapsed" />
+
                 <!-- [顶层] 唱片封套 (Jacket Card)：实心遮蔽底色，彻底杜绝底层黑胶透光穿帮 -->
                 <Border
                     x:Name="JacketCard"
@@ -96,16 +106,39 @@
                             <Grid>
                                 <Image
                                     x:Name="CoverImage"
-                                    Stretch="UniformToFill"
+                                    Stretch="UniformToFill" HorizontalAlignment="Center" VerticalAlignment="Center"
                                     Visibility="Collapsed" />
+                                <!-- 动态封面（网易云）：视频出画面后盖在静态封面上 -->
+                                <controls:DynamicCoverView x:Name="DynamicCover" ClipRadius="13" />
                                 <!-- 切歌时盖在上面的旧封面，淡出后隐藏 -->
                                 <Image
                                     x:Name="OldCoverImage"
                                     IsHitTestVisible="False"
-                                    Stretch="UniformToFill"
+                                    Stretch="UniformToFill" HorizontalAlignment="Center" VerticalAlignment="Center"
                                     Visibility="Collapsed" />
                             </Grid>
                         </Border>
+
+                        <!-- 当前歌曲有 MV 时：右上角的 MV 按钮 -->
+                        <Button
+                            x:Name="MvButton"
+                            Margin="0,10,10,0"
+                            Padding="8,3,8,3"
+                            HorizontalAlignment="Right"
+                            VerticalAlignment="Top"
+                            Canvas.ZIndex="2"
+                            AutomationProperties.Name="播放 MV"
+                            Background="#99000000"
+                            BorderThickness="0"
+                            Click="MvButton_Click"
+                            CornerRadius="6"
+                            ToolTipService.ToolTip="播放 MV"
+                            Visibility="Collapsed">
+                            <StackPanel Orientation="Horizontal" Spacing="4">
+                                <FontIcon FontSize="11" Foreground="White" Glyph="&#xE714;" />
+                                <TextBlock FontSize="11" FontWeight="Bold" Foreground="White" Text="MV" />
+                            </StackPanel>
+                        </Button>
 
                         <!-- 鼠标悬停时的高光：圆心跟着鼠标走 -->
                         <Border

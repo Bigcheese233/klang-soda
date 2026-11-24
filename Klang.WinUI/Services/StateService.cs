@@ -47,6 +47,26 @@ public class SavedTrack
     public string Camelot { get; set; } = "";
 }
 
+/// <summary>云端曲目的最小记录：云端歌曲不在曲库里，重启后靠它恢复上次播放的曲目和队列。</summary>
+public class OnlineTrackSnapshot
+{
+    public string Source { get; set; } = "netease";   // 云端来源的标识
+    public string CloudId { get; set; } = "";           // 曲目在该平台上的 id
+
+    /// <summary>旧字段（只读入不写出）：之前的开发版本用它存网易云 id。</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? NeteaseId
+    {
+        get => null;
+        set { if (!string.IsNullOrEmpty(value) && CloudId.Length == 0) CloudId = value; }
+    }
+    public string Title { get; set; } = "";
+    public string Artist { get; set; } = "";
+    public string Album { get; set; } = "";
+    public double Duration { get; set; }
+    public string CoverUrl { get; set; } = "";
+}
+
 /// <summary>漫游模型里每首歌的行为统计。</summary>
 public class RoamStat
 {
@@ -92,7 +112,7 @@ public class AppState
     public bool ShowVinylDisc { get; set; } = false;        // 播放时封面后面滑出旋转的黑胶唱片
     public bool WaveformSeekBar { get; set; } = false;      // 底栏进度条显示振幅波形（关 = 标准滑块）
     public bool AmbientTimeOfDay { get; set; } = false;     // 沉浸背景随时段变化（深夜更暗更慢、傍晚偏暖），只用本机时间
-    public bool AmbientWeather { get; set; } = false;       // 沉浸背景叠加天气效果（雨痕 / 雪 / 阴天），需要联网
+    public bool AmbientWeather { get; set; } = false;       // 沉浸背景叠加天气效果（雨痕 / 雪 / 阴天 / 闪电 / 雾），需要联网
     public string WeatherCity { get; set; } = "";           // 显示用的城市名
     public double? WeatherLat { get; set; }
     public double? WeatherLon { get; set; }
@@ -105,15 +125,17 @@ public class AppState
     public int DesktopLyricFontSize { get; set; } = 30;
     public int? MiniX { get; set; }
     public int? MiniY { get; set; }
-    public bool TaskbarPlayerEnabled { get; set; }
+    public bool TaskbarPlayerEnabled { get; set; } = false;   // 任务栏播放条默认关闭，在“视图”或“设置 → 外观”里开启
     public string TaskbarPlayerMonitor { get; set; } = "";
     public string TaskbarPlayerSide { get; set; } = "right";    // 停靠在任务栏哪一侧：left | right
 
     public bool AutoFetchMetadata { get; set; } = true;     // 本地歌曲缺封面/信息/歌词时在线补全
+    public int LyricFrameRate { get; set; } = 0;              // 歌词动画帧率上限：0 = 跟随显示器刷新率，否则 120 / 60 / 30
     public string LyricSubMode { get; set; } = "trans";   // trans | roma | both | off
     public int WasapiLatencyMs { get; set; } = 50;
     public bool WasapiExclusive { get; set; }               // WASAPI 独占模式：按文件原采样率 / 位深直接驱动声卡
     public bool BypassDsp { get; set; }                     // 绕过全部音效（均衡 / 空间 / 混响 / 限幅），纯净直通
+    public List<string> LyricSwapTracks { get; set; } = new();          // 本地双语歌词需要“原文与翻译对调”的歌曲 Id
     public Dictionary<string, double> LyricOffsets { get; set; } = new();   // 每首歌的歌词时间偏移（秒）
     public double PlaybackRate { get; set; } = 1.0;
     public string SelectedDeviceId { get; set; } = "default";
@@ -133,16 +155,33 @@ public class AppState
     public int WindowHeight { get; set; } = 820;
     public bool WindowMaximized { get; set; }
 
+    public string CloudSource { get; set; } = "netease";    // 云端面板当前显示的来源
+
     // 网易云：Cookie 用 DPAPI 加密后保存
     public string NeteaseCookiesEnc { get; set; } = "";
     public long NeteaseUserId { get; set; }
     public string NeteaseNickname { get; set; } = "";
     public string NeteaseAvatarUrl { get; set; } = "";
     public string NeteaseQuality { get; set; } = "lossless";
-    public int NeteaseCacheLimitMb { get; set; } = 2048;
+    public bool EasterEgg { get; set; } = false;            // 彩蛋：封面上边缘坐着的小人（关于页连点图标 5 次开关）
+    public bool AutoCheckUpdate { get; set; } = true;       // 启动后自动检查 GitHub 上的新版本（只读公开的发布列表）
+    public string SkippedUpdateVersion { get; set; } = "";  // 用户选了“跳过此版本”的版本号，自动检查时不再提示它
+    public string CloseAction { get; set; } = "ask";        // 点窗口关闭按钮：ask 询问 | tray 最小化到托盘 | exit 退出
+    public bool DynamicCover { get; set; } = true;
+    public int MvQuality { get; set; } = 1080;              // MV 偏好画质（像素高度），没有这一档时用不超过它的最高画质          // 云端歌曲有动态封面时在封面上播放（网易云，需要登录）
+    public int NeteaseCacheLimitMb { get; set; } = 2048;   // 云端缓存上限（每个来源各自计算）
+
+    // QQ 音乐：登录凭证（整段登录结果）用 DPAPI 加密后保存
+    public string QQMusicCredentialEnc { get; set; } = "";
+    public string QQMusicNickname { get; set; } = "";
+    public string QQMusicQuality { get; set; } = "lossless";
 
     public string LastTrackId { get; set; } = "";
+    // 上次播放的是云端曲目时，保存当时的云端队列（含那首歌）；播放本地曲目后清空
+    public List<OnlineTrackSnapshot> LastOnlineQueue { get; set; } = new();
     public List<string> WatchedFolders { get; set; } = new();
+    // 手动从曲库移除、文件仍在监视文件夹里的歌曲（音频路径，CUE 分轨为 “路径#轨号”）：重新扫描时不再加回
+    public List<string> ExcludedFiles { get; set; } = new();
     public Dictionary<string, List<string>> CustomPlaylists { get; set; } = new();
     public List<SmartPlaylistDef> SmartPlaylists { get; set; } = new();
     public RoamModel Roam { get; set; } = new();
@@ -215,10 +254,12 @@ public class StateService
                     if (state.EqGainsDb == null || state.EqGainsDb.Length != 5) state.EqGainsDb = new float[5];
                     state.Tracks ??= new();
                     state.WatchedFolders ??= new();
+                    state.ExcludedFiles ??= new();
                     state.CustomPlaylists ??= new();
                     state.SmartPlaylists ??= new();
                     state.Roam ??= new();
                     state.LyricOffsets ??= new();
+                    state.LyricSwapTracks ??= new();
                     state.Roam.Stats ??= new();
                     state.Roam.Transitions ??= new();
                     State = state;

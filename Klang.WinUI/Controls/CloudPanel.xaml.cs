@@ -10,7 +10,7 @@ using Microsoft.UI.Xaml.Media.Imaging;
 using Windows.Storage.Streams;
 using Klang_WinUI.Models;
 using Klang_WinUI.Services;
-using Klang_WinUI.Services.Netease;
+using Klang_WinUI.Services.Cloud;
 
 namespace Klang_WinUI.Controls;
 
@@ -20,11 +20,11 @@ public sealed class CloudEntry
     public string Title { get; init; } = "";
     public string Subtitle { get; init; } = "";
     public string Glyph { get; init; } = "";
-    public long PlaylistId { get; init; }
+    public string PlaylistId { get; init; } = "";
     public bool IsDaily { get; init; }
 }
 
-/// <summary>网易云面板：扫码 / Cookie 登录、每日推荐、我的歌单、搜索结果。</summary>
+/// <summary>云端面板：扫码 / Cookie 登录、每日推荐、我的歌单、搜索结果。显示的是 <see cref="CloudSources.Current"/>。</summary>
 public sealed partial class CloudPanel : UserControl
 {
     private readonly ObservableCollection<CloudEntry> _entries = new();
@@ -40,7 +40,7 @@ public sealed partial class CloudPanel : UserControl
     /// <summary>用户点播：参数为点播时的整个列表（作为播放队列）和被点的曲目。</summary>
     public event Action<List<TrackItem>, TrackItem>? TrackInvoked;
 
-    private NeteaseService Svc => NeteaseService.Instance;
+    private ICloudSource Svc => CloudSources.Current;
 
     public CloudPanel()
     {
@@ -53,19 +53,86 @@ public sealed partial class CloudPanel : UserControl
         HomeList.ItemsSource = _entries;
         TracksList.ItemsSource = _tracks;
 
-        foreach (var (key, label) in NeteaseService.Qualities)
-            QualityBox.Items.Add(new ComboBoxItem { Content = label, Tag = key });
-        QualityBox.SelectedItem = QualityBox.Items.OfType<ComboBoxItem>()
-            .First(i => (string)i.Tag == Svc.PreferredQuality);
-        _loadingQuality = false;
-
         _qrTimer = DispatcherQueue.GetForCurrentThread().CreateTimer();
         _qrTimer.Interval = TimeSpan.FromSeconds(2);
         _qrTimer.Tick += async (s, e) => await PollQrAsync();
 
-        Svc.LoginChanged += () => DispatcherQueue.SafeEnqueue(UpdateView);
-        Svc.CoverCached += t => DispatcherQueue.SafeEnqueue(() => CoverReady?.Invoke(t));
+        // 来源切换框：只有一个来源时不显示
+        foreach (var src in CloudSources.All)
+        {
+            SourceBox.Items.Add(new ComboBoxItem { Content = src.DisplayName, Tag = src.Key });
+            var s = src;
+            // 只有当前显示的来源变化才刷新界面；封面缓存不分来源，都要通知主窗口
+            s.LoginChanged += () => DispatcherQueue.SafeEnqueue(() => { if (s == Svc) UpdateView(); });
+            s.CoverCached += t => DispatcherQueue.SafeEnqueue(() => CoverReady?.Invoke(t));
+        }
+        SourceBox.SelectedItem = SourceBox.Items.OfType<ComboBoxItem>().FirstOrDefault(i => (string)i.Tag == Svc.Key);
+        ApplySourceUi();
         UpdateView();
+    }
+
+    /// <summary>按当前来源刷新登录提示、音质列表等。</summary>
+    private void ApplySourceUi()
+    {
+        var src = Svc;
+        LoginTitleText.Text = L.F("登录{0}", src.DisplayName);
+
+        _loadingQrMode = true;
+        QrModeBox.Items.Clear();
+        foreach (var (key, label) in src.QrModes)
+            QrModeBox.Items.Add(new ComboBoxItem { Content = label, Tag = key });
+        _qrMode = src.QrModes[0].Key;
+        QrModeBox.SelectedIndex = 0;
+        QrModeBox.Visibility = src.QrModes.Count > 1 ? Visibility.Visible : Visibility.Collapsed;
+        _loadingQrMode = false;
+
+        QrStatusText.Text = src.QrHintFor(_qrMode);
+        CookieExpander.Visibility = src.SupportsCookieLogin ? Visibility.Visible : Visibility.Collapsed;
+        CookieBox.PlaceholderText = src.CookieHint;
+        CookieBox.Password = "";
+        CookieStatusText.Text = "";
+
+        _loadingQuality = true;
+        QualityBox.Items.Clear();
+        foreach (var (key, label) in src.Qualities)
+            QualityBox.Items.Add(new ComboBoxItem { Content = label, Tag = key });
+        QualityBox.SelectedItem = QualityBox.Items.OfType<ComboBoxItem>()
+            .FirstOrDefault(i => (string)i.Tag == src.PreferredQuality);
+        _loadingQuality = false;
+    }
+
+    private string _qrMode = "";
+    private bool _loadingQrMode;
+
+    private async void QrModeBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_loadingQrMode || QrModeBox.SelectedItem is not ComboBoxItem it || it.Tag is not string key || key == _qrMode) return;
+        _qrMode = key;
+        _qrTimer.Stop();
+        _qrKey = "";
+        QrImage.Source = null;
+        QrStatusText.Text = Svc.QrHintFor(_qrMode);
+        if (_active) await RefreshQrAsync();
+    }
+
+    private void SourceBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (SourceBox.SelectedItem is not ComboBoxItem it || it.Tag is not string key || key == Svc.Key) return;
+        var src = CloudSources.Get(key);
+        if (src == null) return;
+        CloudSources.Current = src;
+        // 换了平台：丢掉上一个平台的二维码、歌单和列表
+        _requestSeq++;
+        _qrTimer.Stop();
+        _qrKey = "";
+        QrImage.Source = null;
+        _entries.Clear();
+        _tracks.Clear();
+        _inTracksMode = false;
+        HideBusy();
+        ApplySourceUi();
+        UpdateView();
+        if (_active && !Svc.IsLoggedIn) _ = RefreshQrAsync();
     }
 
     /// <summary>云端曲目的封面缓存完成，供主窗口刷新封面。</summary>
@@ -93,6 +160,7 @@ public sealed partial class CloudPanel : UserControl
     private void UpdateView()
     {
         bool logged = Svc.IsLoggedIn;
+        SourceBox.Visibility = CloudSources.All.Count > 1 && !_inTracksMode ? Visibility.Visible : Visibility.Collapsed;
         LoginView.Visibility = (!logged && !_inTracksMode) ? Visibility.Visible : Visibility.Collapsed;
         HomeView.Visibility = (logged && !_inTracksMode) ? Visibility.Visible : Visibility.Collapsed;
         TracksList.Visibility = _inTracksMode ? Visibility.Visible : Visibility.Collapsed;
@@ -124,7 +192,10 @@ public sealed partial class CloudPanel : UserControl
         QrStatusText.Text = L.T("正在获取二维码…");
         try
         {
-            var (key, png) = await Svc.CreateQrAsync();
+            var src = Svc;
+            var mode = _qrMode;
+            var (key, png) = await src.CreateQrAsync(mode);
+            if (src != Svc || mode != _qrMode) return;   // 等待期间换了来源或扫码方式
             if (key.Length == 0)
             {
                 _qrKey = "";
@@ -144,7 +215,7 @@ public sealed partial class CloudPanel : UserControl
             var bmp = new BitmapImage();
             await bmp.SetSourceAsync(stream);
             QrImage.Source = bmp;
-            QrStatusText.Text = L.T("用网易云音乐 App 扫码登录");
+            QrStatusText.Text = Svc.QrHintFor(_qrMode);
             if (_active) _qrTimer.Start();
         }
         catch (Exception ex)
@@ -164,19 +235,22 @@ public sealed partial class CloudPanel : UserControl
         _qrBusy = true;
         try
         {
-            var (code, msg) = await Svc.PollQrAsync(_qrKey);
-            switch (code)
+            var src = Svc;
+            var key = _qrKey;
+            var (state, msg) = await src.PollQrAsync(key);
+            if (src != Svc || key != _qrKey) return;   // 等待期间换了来源或刷新了二维码
+            switch (state)
             {
-                case 801: QrStatusText.Text = L.T("等待扫码…"); break;
-                case 802: QrStatusText.Text = L.T("已扫码，请在手机上确认登录"); break;
-                case 800:
+                case QrLoginState.Waiting: QrStatusText.Text = L.T("等待扫码…"); break;
+                case QrLoginState.Scanned: QrStatusText.Text = L.T("已扫码，请在手机上确认登录"); break;
+                case QrLoginState.Expired:
                     _qrTimer.Stop();
                     _qrKey = "";
                     QrStatusText.Text = L.T("二维码已过期，正在刷新…");
                     _qrBusy = false;
                     await RefreshQrAsync();
                     return;
-                case 803:
+                case QrLoginState.Success:
                     _qrTimer.Stop();
                     _qrKey = "";
                     QrStatusText.Text = L.T("登录成功");
@@ -202,10 +276,10 @@ public sealed partial class CloudPanel : UserControl
     {
         CookieLoginBtn.IsEnabled = false;
         CookieStatusText.Text = L.T("正在验证…");
-        var (ok, msg) = await Svc.LoginWithCookieAsync(CookieBox.Text);
+        var (ok, msg) = await Svc.LoginWithCookieAsync(CookieBox.Password);
         CookieStatusText.Text = msg;
         CookieLoginBtn.IsEnabled = true;
-        if (ok) CookieBox.Text = "";
+        if (ok) CookieBox.Password = "";
     }
 
     private void Logout_Click(object sender, RoutedEventArgs e)
@@ -234,9 +308,12 @@ public sealed partial class CloudPanel : UserControl
         ShowBusy(L.T("正在加载歌单…"), spinning: true);
         try
         {
-            var playlists = await Svc.GetUserPlaylistsAsync();
+            var src = Svc;
+            var playlists = await src.GetUserPlaylistsAsync();
+            if (src != Svc) return;   // 加载期间换了来源
             _entries.Clear();
-            _entries.Add(new CloudEntry { Title = L.T("每日推荐"), Subtitle = "", Glyph = "", IsDaily = true });
+            if (src.HasDailyRecommend)
+                _entries.Add(new CloudEntry { Title = src.DailyRecommendTitle, Subtitle = "", Glyph = "", IsDaily = true });
             foreach (var pl in playlists)
             {
                 _entries.Add(new CloudEntry
@@ -308,6 +385,28 @@ public sealed partial class CloudPanel : UserControl
     private void TracksList_ItemClick(object sender, ItemClickEventArgs e)
     {
         if (e.ClickedItem is TrackItem t) TrackInvoked?.Invoke(_tracks.ToList(), t);
+    }
+
+    /// <summary>要求播放某首歌的 MV。</summary>
+    public event Action<TrackItem>? MvRequested;
+
+    private void TrackRow_ContextRequested(UIElement sender, Microsoft.UI.Xaml.Input.ContextRequestedEventArgs args)
+    {
+        if (sender is not FrameworkElement { DataContext: TrackItem t } fe) return;
+        var flyout = new MenuFlyout();
+        var play = new MenuFlyoutItem { Text = L.T("播放"), Icon = new FontIcon { Glyph = "" } };
+        play.Click += (s, e) => TrackInvoked?.Invoke(_tracks.ToList(), t);
+        flyout.Items.Add(play);
+        if (Svc.SupportsMv)
+        {
+            var mv = new MenuFlyoutItem { Text = L.T("播放 MV"), Icon = new FontIcon { Glyph = "" }, IsEnabled = t.MvId != "0" };
+            if (!mv.IsEnabled) ToolTipService.SetToolTip(mv, L.T("这首歌没有 MV"));
+            mv.Click += (s, e) => MvRequested?.Invoke(t);
+            flyout.Items.Add(mv);
+        }
+        if (args.TryGetPosition(fe, out var pt)) flyout.ShowAt(fe, new Microsoft.UI.Xaml.Controls.Primitives.FlyoutShowOptions { Position = pt });
+        else flyout.ShowAt(fe);
+        args.Handled = true;
     }
 
     /// <summary>高亮正在播放的云端曲目。</summary>

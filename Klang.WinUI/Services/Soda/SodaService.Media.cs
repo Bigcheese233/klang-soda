@@ -49,7 +49,6 @@ public sealed partial class SodaService
             Album = album,
             Duration = duration,
             CoverUrl = coverUrl,
-            NeteaseId = "",
             FormatBadge = "",
             Bitrate = track.TryGetProperty("bit_rates", out var br) && br.ValueKind == JsonValueKind.Number
                 ? (int)br.GetDouble() : 0,

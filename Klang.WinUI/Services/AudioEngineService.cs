@@ -34,7 +34,11 @@ public class AudioEngineService : IDisposable
     public int LatencyMs { get; set; } = 50;
 
     public bool HasSource => _audioFileReader != null;
-    public bool IsPlaying => _wavePlayer?.PlaybackState == PlaybackState.Playing;
+    public bool IsPlaying => _wavePlayer?.PlaybackState == PlaybackState.Playing && !_softPaused;
+
+    // 独占模式的暂停：输出流不停，只输出静音（见 DspSampleProvider.Gated）
+    private bool _softPaused;
+    private bool IsExclusiveOutput => _outputPlan?.Mode == "Exclusive";
     public double CurrentTime => Math.Max(0, (_audioFileReader?.CurrentTime.TotalSeconds ?? 0) - _segStart);
     public double TotalDuration
     {
@@ -112,6 +116,14 @@ public class AudioEngineService : IDisposable
             return;
         }
 
+        // 声卡让给了 MV：这期间的播放请求（比如打开 MV 时云端歌曲还在下载，下完后照常要求播放）只记下来，
+        // 关掉 MV 时再播放，否则歌和 MV 会同时响
+        if (_held)
+        {
+            _suspended = (filePath, Math.Max(0, segmentStart), segmentEnd, 0, true);
+            return;
+        }
+        _suspended = null;   // 开始播放别的（或恢复）：之前让出声卡时记下的位置作废
         Stop();
         _filePath = filePath;
         _segStart = Math.Max(0, segmentStart);
@@ -139,6 +151,47 @@ public class AudioEngineService : IDisposable
     }
 
     private string? _filePath;
+
+    // ---- 让出声卡（播放 MV 时）：独占模式下普通的暂停仍然占着设备（见 Pause），MV 会没有声音，所以要完全停掉 ----
+    // AutoPlay = 让出期间有人要求播放（歌曲加载完成），恢复时无论之前是否在播放都要播放
+    private (string Path, double Start, double End, double Pos, bool AutoPlay)? _suspended;
+    private bool _held;
+
+    /// <summary>当前是否让出了声卡（等待 <see cref="ResumeOutput"/>）。</summary>
+    public bool IsSuspended => _held || _suspended != null;
+
+    /// <summary>
+    /// 让出声卡：记下当前曲目和位置，停止播放并释放输出设备。没有在播放的曲目时（比如云端歌曲还在下载）也进入让出状态，
+    /// 之后的播放请求都先记下，等 <see cref="ResumeOutput"/> 时再播。
+    /// </summary>
+    public async System.Threading.Tasks.Task SuspendOutputAsync()
+    {
+        if (_held) return;
+        _held = true;
+        CrashReporter.Note("让出音频输出（播放 MV）");
+        if (_audioFileReader == null || string.IsNullOrEmpty(_filePath)) return;
+        _suspended = (_filePath, _segStart, _segEnd, CurrentTime, false);
+        await FadeOutAndStopAsync();
+    }
+
+    /// <summary>恢复 <see cref="SuspendOutputAsync"/> 之前的曲目和位置；play = 是否接着播放（让出期间有过播放请求时总是播放）。</summary>
+    public void ResumeOutput(bool play)
+    {
+        _held = false;
+        if (_suspended is not { } s) return;
+        _suspended = null;
+        Play(s.Path, s.Start, s.End);
+        if (!HasSource) return;
+        if (s.Pos > 0.05) Seek(s.Pos);
+        if (!play && !s.AutoPlay) Pause();
+    }
+
+    /// <summary>不恢复了（比如让出期间用户换了别的歌）。</summary>
+    public void ForgetSuspended()
+    {
+        _held = false;
+        _suspended = null;
+    }
 
     /// <summary>输出设备 / 独占模式改了之后，在当前位置无缝重开输出（保持播放或暂停状态）。</summary>
     public void ReopenOutput() => ReopenOutput(IsPlaying);
@@ -367,6 +420,7 @@ public class AudioEngineService : IDisposable
         wasapi.PlaybackStopped += OnPlaybackStopped;
 
         _wavePlayer = wasapi;
+        _softPaused = false;
         _wavePlayer.Play();
         _positionTimer?.Start();
 
@@ -548,6 +602,7 @@ public class AudioEngineService : IDisposable
 
     private void DisposeCurrent()
     {
+        _softPaused = false;
         ClearMix();
         ReleaseOutputDevice();
         if (_wavePlayer != null)
@@ -661,7 +716,17 @@ public class AudioEngineService : IDisposable
     {
         if (_wavePlayer != null && IsPlaying)
         {
-            _wavePlayer.Pause();
+            if (IsExclusiveOutput && _dspProvider != null)
+            {
+                // 独占模式不停输出流：部分 USB 解码器（如 Microsoft USB Audio 2.0 驱动下的小尾巴）
+                // 在流停止后会出杂音。先淡出，之后一直输出静音，声卡始终收到数据
+                _dspProvider.GateOff(25);
+                _softPaused = true;
+            }
+            else
+            {
+                _wavePlayer.Pause();
+            }
             _positionTimer?.Stop();
             StateChanged?.Invoke(PlaybackState.Paused);
         }
@@ -669,7 +734,16 @@ public class AudioEngineService : IDisposable
 
     public void Resume()
     {
-        if (_wavePlayer != null && _wavePlayer.PlaybackState == PlaybackState.Paused)
+        if (_wavePlayer == null) return;
+        if (_softPaused)
+        {
+            _softPaused = false;
+            _dspProvider?.GateOn(25);
+            if (_wavePlayer.PlaybackState != PlaybackState.Playing) _wavePlayer.Play();
+            _positionTimer?.Start();
+            StateChanged?.Invoke(PlaybackState.Playing);
+        }
+        else if (_wavePlayer.PlaybackState == PlaybackState.Paused)
         {
             _wavePlayer.Play();
             _positionTimer?.Start();
@@ -700,6 +774,7 @@ public class AudioEngineService : IDisposable
 
     public void Stop()
     {
+        _softPaused = false;
         _positionTimer?.Stop();
         ClearMix();
         if (_wavePlayer != null)

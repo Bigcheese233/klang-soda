@@ -183,15 +183,48 @@ public class LyricsService
         var transEntries = !string.IsNullOrWhiteSpace(transLrc) ? ParseRawEntries(transLrc) : new List<RawLrcEntry>();
 
         var romaEntries = !string.IsNullOrWhiteSpace(romaLrc) ? ParseRawEntries(romaLrc) : new List<RawLrcEntry>();
-        string FindNear(List<RawLrcEntry> list, double t) => list
+        string FindNear(List<RawLrcEntry> list, double t) => Clean(list
             .Where(te => Math.Abs(te.Time - t) <= 0.8)
             .OrderBy(te => Math.Abs(te.Time - t))
             .Select(te => te.Text)
-            .FirstOrDefault() ?? "";
+            .FirstOrDefault());
 
-        var rawList = new List<(double Time, string Text, string Sub, string Roma, List<LyricWord>? Words)>();
+        // 网易云的翻译里，不需要翻译的行（比如中文歌里的中文句）写成 “//”，当作没有翻译（#26）
+        static string Clean(string? s) =>
+            string.IsNullOrWhiteSpace(s) || s.All(ch => ch == '/' || char.IsWhiteSpace(ch)) ? "" : s.Trim();
+
+        // ---- 本地歌词常见的双语写法：原文和翻译各占一行、时间标签相同。合并成一句，否则两行同时开始，
+        //      高亮会落在排在后面的那行（通常是翻译）上。只在没有单独的翻译歌词时这样处理。----
+        var groups = new List<List<RawLrcEntry>>();
         foreach (var entry in primaryEntries)
         {
+            bool canMerge = transEntries.Count == 0 && groups.Count > 0 && !IsBlankEntry(entry) && !IsBlankEntry(groups[^1][0])
+                            && Math.Abs(entry.Time - groups[^1][0].Time) <= 0.05;
+            if (canMerge) groups[^1].Add(entry);
+            else groups.Add(new List<RawLrcEntry> { entry });
+        }
+        // 整首歌统一判断原文在前还是在后（逐行判断会出现这句对、下一句反的情况）
+        var multi = groups.Where(g => g.Count >= 2).ToList();
+        bool originalLast = multi.Count > 0 && multi.Sum(g => TranslationScore(g[0])) > multi.Sum(g => TranslationScore(g[^1]));
+
+        var rawList = new List<(double Time, string Text, string Sub, string Roma, List<LyricWord>? Words, bool Paired, List<LyricWord>? AltWords)>();
+        foreach (var group in groups)
+        {
+            if (group.Count >= 2)
+            {
+                var main = originalLast ? group[^1] : group[0];
+                var others = group.Where(e => !ReferenceEquals(e, main)).ToList();
+                // 原文是日文 / 韩文时，几乎全是拉丁字母的那行是罗马音，其余是翻译
+                bool asian = HasKanaOrHangul(main.Text);
+                var romaLine = asian ? others.FirstOrDefault(e => IsMostlyLatin(e.Text)) : null;
+                var transLines = others.Where(e => !ReferenceEquals(e, romaLine)).ToList();
+                string trans = string.Join(" / ", transLines.Select(e => Clean(e.Text)).Where(s => s.Length > 0));
+                string roma = romaLine != null ? Clean(romaLine.Text) : (romaEntries.Count > 0 ? FindNear(romaEntries, main.Time) : "");
+                rawList.Add((main.Time, main.Text.Trim(), trans, roma, main.Words, trans.Length > 0, transLines.FirstOrDefault()?.Words));
+                continue;
+            }
+
+            var entry = group[0];
             double t = entry.Time;
             string text = entry.Text;
             string mainText = text;
@@ -201,32 +234,42 @@ public class LyricsService
             {
                 var parts = text.Split("//", 2);
                 mainText = parts[0].Trim();
-                subText = parts[1].Trim();
+                subText = Clean(parts[1]);
             }
             else if (transEntries.Count > 0)
             {
-                var bestTrans = transEntries
+                subText = Clean(transEntries
                     .Where(te => Math.Abs(te.Time - t) <= 0.6)
                     .OrderBy(te => Math.Abs(te.Time - t))
                     .Select(te => te.Text)
-                    .FirstOrDefault();
-
-                if (!string.IsNullOrWhiteSpace(bestTrans))
-                {
-                    subText = bestTrans;
-                }
+                    .FirstOrDefault());
             }
 
             string romaText = romaEntries.Count > 0 ? FindNear(romaEntries, t) : "";
-            rawList.Add((t, mainText, subText, romaText, entry.Words));
+            rawList.Add((t, mainText, subText, romaText, entry.Words, false, null));
         }
 
-        var result = new List<LyricLine>();
-        for (int i = 0; i < rawList.Count; i++)
+        // 只有时间、没有文字的空行（有的歌词每句后面都跟一个，标记这句唱完）不单独占一行，
+        // 否则歌词之间会出现大段空白、间距忽大忽小（#26）；它的时间用作上一句的结束时间
+        var kept = new List<(double Time, string Text, string Sub, string Roma, List<LyricWord>? Words, bool Paired, List<LyricWord>? AltWords, double? End)>();
+        foreach (var item in rawList)
         {
-            var item = rawList[i];
-            double nextTime = (i + 1 < rawList.Count) ? rawList[i + 1].Time : item.Time + 6.0;
-            double endTime = Math.Max(item.Time + 1.2, nextTime - 0.1);
+            bool blank = string.IsNullOrWhiteSpace(item.Text) && (item.Words == null || item.Words.Count == 0);
+            if (blank)
+            {
+                if (kept.Count > 0 && kept[^1].End == null) kept[^1] = kept[^1] with { End = item.Time };
+                continue;
+            }
+            kept.Add((item.Time, item.Text, item.Sub, item.Roma, item.Words, item.Paired, item.AltWords, null));
+        }
+        if (kept.Count == 0) return CreateEmptyPlaceholder(L.T("暂无歌词"));
+
+        var result = new List<LyricLine>();
+        for (int i = 0; i < kept.Count; i++)
+        {
+            var item = kept[i];
+            double nextTime = (i + 1 < kept.Count) ? kept[i + 1].Time : item.Time + 6.0;
+            double endTime = Math.Max(item.Time + 1.2, (item.End ?? nextTime) - 0.1);
 
             result.Add(new LyricLine
             {
@@ -236,11 +279,51 @@ public class LyricsService
                 Text = item.Text,
                 Sub = item.Sub,
                 Roma = item.Roma,
-                Words = item.Words
+                Words = item.Words,
+                PairedTranslation = item.Paired,
+                AltWords = item.AltWords
             });
         }
 
         return result;
+    }
+
+    // ---- 双语歌词：判断哪一行是翻译 ----
+
+    private static bool IsBlankEntry(RawLrcEntry e) => string.IsNullOrWhiteSpace(e.Text) && (e.Words == null || e.Words.Count == 0);
+
+    private static bool IsKana(char c) => c is >= '぀' and <= 'ヿ' or >= 'ㇰ' and <= 'ㇿ';
+    private static bool IsHangul(char c) => c is >= '가' and <= '힯' or >= 'ᄀ' and <= 'ᇿ' or >= '㄰' and <= '㆏';
+    private static bool IsHan(char c) => c is >= '一' and <= '鿿' or >= '㐀' and <= '䶿';
+    private static bool IsLatin(char c) => c is >= 'A' and <= 'Z' or >= 'a' and <= 'z' || c is >= 'À' and <= 'ɏ';
+
+    private static bool HasKanaOrHangul(string s) => s.Any(c => IsKana(c) || IsHangul(c));
+
+    private static bool IsMostlyLatin(string s)
+    {
+        int letters = s.Count(char.IsLetter);
+        return letters > 0 && s.Count(IsLatin) >= letters * 0.8;
+    }
+
+    /// <summary>
+    /// 一行歌词“像翻译”的程度：带逐字时间的、含假名或韩文的更像原文；
+    /// 是界面语言（中文界面下的纯中文、英文 / 丹麦文界面下的拉丁字母）的更像翻译——翻译是给听的人看的。
+    /// </summary>
+    private static double TranslationScore(RawLrcEntry e)
+    {
+        double s = 0;
+        if (e.Words is { Count: > 0 }) s -= 3;
+        if (HasKanaOrHangul(e.Text)) s -= 2;
+        int letters = e.Text.Count(char.IsLetter);
+        if (letters > 0)
+        {
+            bool zhUi = L.Code.StartsWith("zh", StringComparison.OrdinalIgnoreCase);
+            bool userLang = zhUi
+                ? e.Text.Count(IsHan) >= letters * 0.5 && !HasKanaOrHangul(e.Text)
+                : IsMostlyLatin(e.Text);
+            if (userLang) s += 1;
+        }
+        return s;
     }
 
     private List<RawLrcEntry> ParseRawEntries(string text)

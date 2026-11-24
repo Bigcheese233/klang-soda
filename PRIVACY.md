@@ -2,13 +2,13 @@
 
 [简体中文](#简体中文) · [English](#english) · [Dansk](#dansk)
 
-生效日期 / Effective date / Ikrafttrædelsesdato: 2026-11-16 · 适用版本 / Applies to / Gælder for: Klang Soda (WinUI 3) 2.x
+生效日期 / Effective date / Ikrafttrædelsesdato: 2026-11-24 · 适用版本 / Applies to / Gælder for: Klang Soda (WinUI 3) 2.x
 
 ---
 
 独立项目补充 / Independent-edition notes / Bemærkninger om den selvstændige udgave：
 
-- 资料、封面、歌词、波形、网易云缓存和汽水数据均默认使用 `%LocalAppData%\KlangSoda`；设置 `KLANG_DATA_DIR` 后使用 `<自定义根目录>\KlangSoda`，不自动迁移原版目录。更新检查只访问 `Bigcheese233/klang-soda` 的公开发布列表。
+- 资料、封面、歌词、波形、网易云/QQ 音乐缓存和汽水数据均默认使用 `%LocalAppData%\KlangSoda`；设置 `KLANG_DATA_DIR` 后使用 `<自定义根目录>\KlangSoda`，不自动迁移原版目录。更新检查只访问 `Bigcheese233/klang-soda` 的公开发布列表。
 - 保留上游的可选天气功能：搜索城市时向 `geocoding-api.open-meteo.com` 发送城市关键词；启用天气时向 `api.open-meteo.com` 发送所选地点的坐标与天气查询参数，服务端也会看到请求 IP。不使用这些功能即可避免相应请求。
 - 汽水首次设备注册和官方登录验证会使用计算机名称、系统/版本/时区及独立设备标识。发布准备脚本会下载 Node 官方二进制及 GitHub 上的许可证，这是开发/打包时的网络请求，不是应用每次启动时的下载。
 - Data and caches use `%LocalAppData%\KlangSoda`, or `<KLANG_DATA_DIR>\KlangSoda` when overridden. The original application's data is not migrated automatically. Update checks use only this project's public GitHub releases.
@@ -21,20 +21,22 @@
 
 Klang Soda 是在用户本机运行的桌面应用。开发者不运营与本应用配套的服务器，不要求注册账号，也不在应用中集成任何使用统计、遥测或崩溃上报组件。开发者不会通过本应用收集、存储或接收用户的个人信息。
 
-本应用会在用户使用特定功能时，直接向第三方服务（网易云音乐、汽水音乐及其认证和媒体服务、React CDN、LRCLIB、GitHub）发起网络请求。这些请求的内容、触发条件与控制方式见第 3 节。
+本应用会在用户使用特定功能时，直接向第三方服务（网易云音乐、QQ 音乐、汽水音乐及其认证/媒体服务、React CDN、LRCLIB、Open-Meteo、GitHub）发起网络请求。这些请求的内容、触发条件与控制方式见第 3 节。
 
 本声明适用于 Klang Soda 的 WinUI 3 版本（2.x）。早期的 PyQt6 版本不在本声明范围内。
 
 ### 2. 本地存储的数据
 
-应用数据保存在 `%LocalAppData%\KlangSoda`，仅用于应用自身功能。本地曲库索引与设置不会上传；账号与在线播放所需的请求数据见第 3 节。
+应用数据保存在 `%LocalAppData%\KlangSoda`。曲库索引与设置不会上传；账号与在线播放所需的请求数据见第 3 节。
 
 | 位置 | 内容 |
 | :--- | :--- |
-| `player_state.json`（及 `.bak` 备份） | 曲库索引（文件路径、标签信息、时长、格式）、监视的文件夹、歌单与智能歌单、收藏、播放次数与最近播放时间、漫游模式的学习数据、各曲目的分析结果（声学特征、音质检测结果、BPM 与调性）、歌词时间偏移、界面与音频设置、窗口位置，以及加密后的网易云登录凭据 |
+| `player_state.json`（及 `.bak` 备份） | 曲库索引（文件路径、标签信息、时长、格式）、监视的文件夹、歌单与智能歌单、收藏、播放次数与最近播放时间、漫游模式的学习数据、各曲目的分析结果（声学特征、音质检测结果、BPM 与调性）、歌词时间偏移、界面与音频设置、窗口位置，以及加密后的网易云音乐、QQ 音乐登录凭据 |
 | `covers`、`CoversCache` | 从音频文件提取或从网络获取的封面图片 |
-| `netease_cache` | 网易云音乐曲目的缓存音频文件 |
+| `netease_cache`、`qqmusic_cache` | 网易云音乐、QQ 音乐曲目的缓存音频文件与封面 |
 | `LyricsCache` | 从 LRCLIB 获取的歌词 |
+| `CustomCovers`、`LyricsChosen`、`Waveforms` | 用户裁剪/更换的封面、选定歌词和波形缓存 |
+| `netease_cache/*_dyncover.mp4` | 开启动态封面后下载的静音短视频；MV 播放地址由平台返回后交给播放器，不作为同类音频缓存保存 |
 | `soda/session.bin` | 独立的汽水账号 Cookie、账号编号、昵称与头像地址，整体使用当前 Windows 用户作用域的 DPAPI 加密 |
 | `soda/device.json`、`soda/native/<版本-哈希>/` | Klang Soda 汽水接入独立生成或注册的设备 / 安装标识、注册状态，以及从本机官方 3.7.0 安装目录暂存的公共原生组件 |
 | `soda/u_<账号哈希>/audio`、`soda/u_<账号哈希>/covers`、`soda/u_<账号哈希>/lyrics-v2` | 按汽水账号隔离的音频、封面与归一化逐行歌词缓存；模式列表位于 `soda/shared/modes`，未登录缓存使用 `soda/guest` |
@@ -45,28 +47,31 @@ Klang Soda 是在用户本机运行的桌面应用。开发者不运营与本应
 - 当前播放的曲目信息（歌名、歌手、封面、播放进度）会提供给 Windows 系统媒体控件（SMTC），用于锁屏、音量浮层和多媒体键，仅在本机系统内使用。
 - 卸载程序不会删除 `%LocalAppData%\KlangSoda`。
 
+
 ### 3. 网络请求
 
 | 功能 | 对象 | 发送的内容 | 触发条件与控制 |
 | :--- | :--- | :--- | :--- |
 | 自动补全封面、专辑、歌手 | 网易云音乐（music.163.com 及其图片服务器） | 以歌名和歌手组成的搜索关键字；匹配成功后按歌曲编号请求封面与元数据 | 设置 → 曲库 → “自动补全封面与歌词”，可关闭 |
+| 网易云 MV / 动态封面 | 网易云接口及其视频 CDN | 曲目/MV 编号、画质、相关请求凭据；视频服务器可见 IP 与请求头 | MV 为主动点击播放；动态封面可在设置中关闭，需要登录时才请求 |
 | 自动补全歌词 | 网易云音乐；LRCLIB（lrclib.net） | 对 LRCLIB：歌名、歌手、专辑、时长。对网易云：同上一行 | 同上；歌词菜单中的“在线搜索歌词”为手动触发 |
 | 网易云账号、云端曲库与播放 | 网易云音乐 | 登录凭据（见第 4 节）、所请求的歌单与曲目、搜索关键字 | 仅在用户登录或使用云端页面时发生 |
+| QQ 音乐账号、云端曲库与播放 | QQ 音乐（y.qq.com 及其接口、音频与图片服务器）；扫码登录时另会访问 QQ 登录（ptlogin2.qq.com、graph.qq.com）或微信开放平台（open.weixin.qq.com） | 登录凭据（见第 4 节）、所请求的歌单与曲目、搜索关键字 | 仅在用户于云端页面切换到 QQ 音乐并登录或使用时发生 |
+| 天气效果 | Open-Meteo（api.open-meteo.com、geocoding-api.open-meteo.com） | 搜索城市时：输入的城市名与界面语言。之后每 30 分钟：所选城市的经纬度（保留两位小数，约 1 千米精度） | 仅在设置 → 外观中开启“天气效果”并选择城市后发生，默认关闭；关闭后即停止请求 |
+| 检查更新 | GitHub（api.github.com） | 不含个人信息的发布列表请求 | 每次启动应用后自动检查一次（可在设置 → 关于中关闭“启动时自动检查更新”），以及用户点击“检查更新”时；不会自动下载或安装 |
+| 下载新版本 | 系统默认浏览器 | 由浏览器访问 GitHub 发布页 | 仅在用户点击下载时发生 |
 | 汽水二维码登录与安全验证 | WebView2 中的汽水官方认证服务（如 api.qishui.com、bff-pc.qishui.com、auth.zijieapi.com）及验证 / 静态资源 CDN；React CDN（unpkg.com） | 本次二维码登录、轮询与安全验证请求及该临时浏览器会话的站点数据 | 打开汽水登录窗口时；按官方验证流程需要加载资源 |
 | 汽水账号、推荐、收藏读取与授权播放 | api.qishui.com 及其允许的媒体 / 图片 CDN | 当前 Klang Soda 汽水会话凭据、独立设备与安装标识、计算机名、系统 / 版本 / 时区信息、请求的曲目与歌单、推荐模式、批次与已播放曲目编号 | 使用汽水页面、播放或预缓冲时；不使用该功能即可避免相应请求 |
-| 检查更新 | GitHub（api.github.com） | 不含个人信息的发布列表请求 | 仅在用户于设置 → 关于中点击“检查更新”时发生，应用不会在后台自动检查 |
-| 下载新版本 | 系统默认浏览器 | 由浏览器访问 GitHub 发布页 | 仅在用户点击下载时发生 |
 
-应用发起的接口请求使用 HTTPS；封面与音频文件的下载地址由网易云音乐的接口返回，以其提供的地址为准。上述服务端会像任何网络服务一样看到请求方的 IP 地址和通用请求头；其对这些信息的处理由各服务方的隐私政策规定，开发者无法控制。
+应用发起的接口请求使用 HTTPS；封面与音频文件的下载地址由网易云音乐、QQ 音乐的接口返回，应用只接受对应平台域名下的地址。上述服务端会像任何网络服务一样看到请求方的 IP 地址和通用请求头；其对这些信息的处理由各服务方的隐私政策规定，开发者无法控制。
+
 
 汽水媒体与封面下载仅接受允许域名的 HTTPS 地址，并校验重定向；CDN 下载不附带账号 Cookie。汽水 API 客户端仅向 `api.qishui.com` 附带本次登录取得的会话 Cookie；登录 WebView2 本身仍会按官方认证流程与相应站点交换数据。收藏仅供读取和分页浏览，不向汽水写入或取消收藏。
 
-### 4. 账号与登录凭据
+### 4. 云端账号与登录凭据
 
-#### 网易云音乐
-
-- 登录方式为扫码或手动粘贴 Cookie。应用不会获取或保存用户的网易云密码。
-- 登录后取得的 Cookie 使用 Windows 数据保护接口（DPAPI，当前用户作用域）加密后保存在 `player_state.json` 中，仅当前 Windows 用户账户可以解密。
+- 网易云音乐的登录方式为扫码或手动粘贴 Cookie；QQ 音乐的登录方式为 QQ 或微信扫码。应用不会获取或保存用户的网易云、QQ 或微信密码。
+- 登录后取得的凭据（网易云的 Cookie、QQ 音乐的登录令牌）使用 Windows 数据保护接口（DPAPI，当前用户作用域）加密后保存在 `player_state.json` 中，仅当前 Windows 用户账户可以解密。
 - 在设置中退出登录会清除内存与磁盘上保存的凭据。
 - 手动粘贴 Cookie 属于高权限凭据，请勿在不受信任的环境中操作，也不要将 `player_state.json` 与他人共享。
 
@@ -77,23 +82,26 @@ Klang Soda 是在用户本机运行的桌面应用。开发者不运营与本应
 - 在汽水主页退出登录会清除内存中的凭据并删除 `session.bin`，不会同时删除设备标识、原生组件或按账号保存的音频、封面与歌词缓存。
 - 如需清除全部汽水本地数据，先关闭 Klang Soda，再删除数据目录中的 `soda` 文件夹。缓存为普通文件，账号哈希目录用于隔离，并不等于加密。
 
+
 ### 5. 第三方服务
 
 Klang Soda 使用的第三方服务各自有独立的隐私政策与服务条款，使用相应功能即表示这些数据会发送给对应服务方：
 
 - 网易云音乐：<https://music.163.com>
+- QQ 音乐：<https://y.qq.com>
+- LRCLIB：<https://lrclib.net>
+- Open-Meteo：<https://open-meteo.com/en/terms>
+- GitHub：<https://docs.github.com/site-policy/privacy-policies/github-general-privacy-statement>
+
 - 汽水音乐 API 及其认证 / 媒体服务：<https://api.qishui.com>
 - React CDN（登录验证所需资源）：<https://unpkg.com>
-- LRCLIB：<https://lrclib.net>
-- GitHub：<https://docs.github.com/site-policy/privacy-policies/github-general-privacy-statement>
 
 ### 6. 用户的控制权
 
 - 关闭“自动补全封面与歌词”后，应用不会再为本地曲目联网查找元数据与歌词。
-- 不登录网易云、不使用“检查更新”和“在线搜索歌词”，则应用不会产生相应的网络请求。
-- 不打开汽水页面或登录窗口、不播放汽水曲目，则不会触发相应汽水请求。
+- 不登录网易云音乐或 QQ 音乐、不开启“天气效果”、关闭“启动时自动检查更新”且不使用“检查更新”和“在线搜索歌词”，则应用不会产生相应的网络请求。
 - 需要清除全部本地数据时，退出应用后删除 `%LocalAppData%\KlangSoda` 目录即可。
-- 设置 → 网络与缓存 中可单独清理网易云音频缓存。
+- 设置 → 网络与缓存 中可单独清理云端音频缓存。
 
 ### 7. 安全
 
@@ -111,20 +119,22 @@ Klang Soda 使用的第三方服务各自有独立的隐私政策与服务条款
 
 Klang Soda is a desktop application that runs on the user's own computer. The developer does not operate any server for this application, does not require an account, and does not include usage analytics, telemetry or crash reporting. The developer does not collect, store or receive personal information from users through this application.
 
-When a user uses certain features, the application connects directly to third-party services (NetEase Cloud Music, Soda Music and its authentication and media services, the React CDN, LRCLIB and GitHub). What is sent, when, and how to control it is described in Section 3.
+When a user uses certain features, the application connects directly to third-party services (NetEase Cloud Music, QQ Music, Soda Music and its authentication/media services, the React CDN, LRCLIB, Open-Meteo and GitHub). What is sent, when, and how to control it is described in Section 3.
 
 This statement applies to the WinUI 3 version of Klang Soda (2.x). The earlier PyQt6 version is not covered.
 
 ### 2. Data stored locally
 
-Application data is kept in `%LocalAppData%\KlangSoda` and used only for application features. The local library index and settings are not uploaded; data sent for accounts and online playback is described in Section 3.
+Application data is kept in `%LocalAppData%\KlangSoda`. The local library index and settings are not uploaded; requests for accounts and online playback are described in Section 3.
 
 | Location | Contents |
 | :--- | :--- |
-| `player_state.json` (and its `.bak` backup) | Library index (file paths, tag information, duration, format), watched folders, playlists and smart playlists, favourites, play counts and last-played times, roaming-mode learning data, per-track analysis results (acoustic features, audio quality verdict, BPM and key), lyric timing offsets, interface and audio settings, window positions, and the encrypted NetEase Cloud Music credentials |
+| `player_state.json` (and its `.bak` backup) | Library index (file paths, tag information, duration, format), watched folders, playlists and smart playlists, favourites, play counts and last-played times, roaming-mode learning data, per-track analysis results (acoustic features, audio quality verdict, BPM and key), lyric timing offsets, interface and audio settings, window positions, and the encrypted NetEase Cloud Music and QQ Music credentials |
 | `covers`, `CoversCache` | Cover images extracted from audio files or downloaded from the network |
-| `netease_cache` | Cached audio files of NetEase Cloud Music tracks |
+| `netease_cache`, `qqmusic_cache` | Cached audio files and covers of NetEase Cloud Music and QQ Music tracks |
 | `LyricsCache` | Lyrics retrieved from LRCLIB |
+| `CustomCovers`, `LyricsChosen`, `Waveforms` | Adjusted artwork, selected lyrics and waveform caches |
+| `netease_cache/*_dyncover.mp4` | Silent animated-cover videos; MV URLs are handed to the video player rather than saved as ordinary audio-cache files |
 | `soda/session.bin` | Separate Soda account cookie, account ID, nickname and avatar address, encrypted together with DPAPI in current-Windows-user scope |
 | `soda/device.json`, `soda/native/<version-hash>/` | Independent device / installation identifiers generated or registered for Klang Soda, registration state, and public native components staged from the local official 3.7.0 installation |
 | `soda/u_<account-hash>/audio`, `soda/u_<account-hash>/covers`, `soda/u_<account-hash>/lyrics-v2` | Audio, cover and normalized line-lyric caches isolated by Soda account; mode lists are in `soda/shared/modes`, and signed-out caching uses `soda/guest` |
@@ -135,28 +145,33 @@ Notes:
 - Information about the current track (title, artist, cover, progress) is provided to the Windows System Media Transport Controls (SMTC) for the lock screen, volume flyout and media keys. It is used within the local system only.
 - Uninstalling the application does not delete `%LocalAppData%\KlangSoda`.
 
+
 ### 3. Network requests
 
 | Feature | Recipient | Data sent | Trigger and control |
 | :--- | :--- | :--- | :--- |
 | Auto-fill of covers, album and artist | NetEase Cloud Music (music.163.com and its image servers) | A search keyword made of title and artist; after a match, requests for the cover and metadata by song ID | Settings → Library → "Fill in covers and lyrics automatically"; can be turned off |
-| Auto-fill of lyrics | NetEase Cloud Music; LRCLIB (lrclib.net) | To LRCLIB: title, artist, album, duration. To NetEase: as in the row above | As above; "Search lyrics online" in the lyrics menu is triggered manually |
+| NetEase MVs / animated covers | NetEase APIs and video CDNs | Track/MV IDs, quality, relevant credentials; video servers can see IP and request headers | MVs are played on request; animated covers can be disabled in settings and require login where applicable |
+| Auto-fill of lyrics | NetEase Cloud Music; LRCLIB (lrclib.net) | To LRCLIB: title, artist, album, duration. To NetEase: as in the auto-fill metadata row | As above; "Search lyrics online" in the lyrics menu is triggered manually |
 | NetEase account, cloud library and playback | NetEase Cloud Music | Login credentials (see Section 4), requested playlists and tracks, search keywords | Only when the user signs in or uses the cloud page |
-| Soda QR sign-in and security verification | Official Soda authentication services in WebView2 (such as api.qishui.com, bff-pc.qishui.com and auth.zijieapi.com), verification / static-resource CDNs, and the React CDN (unpkg.com) | Current QR login, polling and verification requests, plus site data in that temporary browser session | When the Soda sign-in window is opened; resources load as required by the official verification flow |
-| Soda account, recommendations, reading favorites and authorized playback | api.qishui.com and permitted media / image CDNs | Current Klang Soda Soda session credentials, independent device and installation IDs, system / version / timezone information, requested tracks and playlists, mode, batch and played-track IDs | When using the Soda page, playback or prefetch; avoid these requests by not using the feature |
-| Update check | GitHub (api.github.com) | A request for the release list, containing no personal information | Only when the user clicks "Check for updates" in Settings → About; the application does not check in the background |
+| QQ Music account, cloud library and playback | QQ Music (y.qq.com and its API, audio and image servers); QR sign-in also contacts QQ login (ptlogin2.qq.com, graph.qq.com) or the WeChat Open Platform (open.weixin.qq.com) | Login credentials (see Section 4), requested playlists and tracks, search keywords | Only when the user switches the cloud page to QQ Music and signs in or uses it |
+| Weather effects | Open-Meteo (api.open-meteo.com, geocoding-api.open-meteo.com) | When searching for a city: the city name entered and the interface language. Then every 30 minutes: the latitude and longitude of the chosen city, rounded to two decimals (about 1 km) | Only after "Weather effects" is turned on in Settings → Appearance and a city is chosen; off by default; turning it off stops the requests |
+| Update check | GitHub (api.github.com) | A request for the release list, containing no personal information | Once each time the application starts (can be turned off with "Check for updates on startup" in Settings → About), and when the user clicks "Check for updates"; nothing is downloaded or installed automatically |
 | Downloading a new version | The default web browser | The browser opens the GitHub release page | Only when the user clicks download |
+| Soda QR sign-in and security verification | Official Soda authentication services in WebView2 (such as api.qishui.com, bff-pc.qishui.com and auth.zijieapi.com), verification / static-resource CDNs, and the React CDN (unpkg.com) | Current QR login, polling and verification requests, plus site data in that temporary browser session | When the Soda sign-in window is opened; resources load as required by the official verification flow |
+| Soda account, recommendations, reading favorites and authorized playback | api.qishui.com and permitted media / image CDNs | Current Klang Soda session credentials, independent device and installation IDs, computer name, system / version / timezone information, requested tracks and playlists, mode, batch and played-track IDs | When using the Soda page, playback or prefetch; avoid these requests by not using the feature |
 
-API requests made by the application use HTTPS; download addresses for cover images and audio files are returned by the NetEase Cloud Music API and are used as provided. As with any network service, the recipients can see the requester's IP address and standard request headers. Their handling of this information is governed by their own privacy policies, which the developer does not control.
+API requests made by the application use HTTPS; download addresses for cover images and audio files are returned by the NetEase Cloud Music and QQ Music APIs; only addresses on the respective platform's domains are accepted. As with any network service, the recipients can see the requester's IP address and standard request headers. Their handling of this information is governed by their own privacy policies, which the developer does not control.
 
-Soda media and cover downloads accept only HTTPS addresses on permitted domains and validate redirects; CDN downloads do not attach account cookies. The Soda API client attaches the cookie obtained in the current login only to `api.qishui.com`; the login WebView2 itself still exchanges data with the respective sites during the official authentication flow. Favorites can be read and paginated; Klang Soda does not add or remove remote Soda favorites.
+Soda media and covers require HTTPS on permitted domains, with redirects checked. CDN downloads do not include account cookies. The Soda API client sends the current session cookie only to `api.qishui.com`; the login WebView2 exchanges data with the relevant sites as required by the official authentication flow. Favorites are read and paged only; Klang Soda does not add or remove Soda favorites.
 
-### 4. Accounts and credentials
 
-#### NetEase Cloud Music
 
-- Sign-in is by QR code or by pasting a cookie manually. The application does not obtain or store the user's NetEase password.
-- The cookie obtained after sign-in is encrypted with the Windows Data Protection API (DPAPI, current-user scope) and stored in `player_state.json`. Only the same Windows user account can decrypt it.
+
+### 4. Cloud accounts and credentials
+
+- NetEase Cloud Music sign-in is by QR code or by pasting a cookie manually; QQ Music sign-in is by scanning a QR code with QQ or WeChat. The application does not obtain or store the user's NetEase, QQ or WeChat password.
+- The credentials obtained after sign-in (the NetEase cookie, the QQ Music login token) are encrypted with the Windows Data Protection API (DPAPI, current-user scope) and stored in `player_state.json`. Only the same Windows user account can decrypt it.
 - Signing out in Settings clears the credentials from memory and from disk.
 - A pasted cookie is a high-privilege credential. Do not paste it on an untrusted machine, and do not share `player_state.json` with others.
 
@@ -167,23 +182,26 @@ Soda media and cover downloads accept only HTTPS addresses on permitted domains 
 - Signing out on the Soda homepage clears credentials from memory and deletes `session.bin`. It leaves device identifiers, staged native components, and per-account audio, cover and lyric caches in place.
 - To remove all local Soda data, close Klang Soda and delete the `soda` folder inside the data directory. Caches are ordinary files; hashed account directories provide separation, not encryption.
 
+
 ### 5. Third-party services
 
 The third-party services used by Klang Soda have their own privacy policies and terms. By using the related feature, the data described above is sent to the respective provider:
 
 - NetEase Cloud Music: <https://music.163.com>
+- QQ Music: <https://y.qq.com>
+- LRCLIB: <https://lrclib.net>
+- Open-Meteo: <https://open-meteo.com/en/terms>
+- GitHub: <https://docs.github.com/site-policy/privacy-policies/github-general-privacy-statement>
+
 - Soda Music API and its authentication / media services: <https://api.qishui.com>
 - React CDN (resources used for login verification): <https://unpkg.com>
-- LRCLIB: <https://lrclib.net>
-- GitHub: <https://docs.github.com/site-policy/privacy-policies/github-general-privacy-statement>
 
 ### 6. User control
 
 - With "Fill in covers and lyrics automatically" turned off, the application no longer looks up metadata or lyrics online for local tracks.
-- If the user does not sign in to NetEase and does not use "Check for updates" or "Search lyrics online", the corresponding network requests are not made.
-- Avoid opening the Soda page or sign-in window and playing Soda tracks to avoid the corresponding Soda requests.
+- If the user does not sign in to NetEase Cloud Music or QQ Music, does not turn on "Weather effects", turns off "Check for updates on startup" and does not use "Check for updates" or "Search lyrics online", the corresponding network requests are not made.
 - To remove all local data, close the application and delete the `%LocalAppData%\KlangSoda` folder.
-- The NetEase audio cache can be cleared separately under Settings → Network.
+- The cloud audio cache can be cleared separately under Settings → Network.
 
 ### 7. Security
 
@@ -201,20 +219,22 @@ This statement is updated as the application changes. The updated version is pub
 
 Klang Soda er et skrivebordsprogram, der kører på brugerens egen computer. Udvikleren driver ingen servere til programmet, kræver ingen konto og har ikke indbygget brugsstatistik, telemetri eller fejlrapportering. Udvikleren indsamler, lagrer eller modtager ikke personoplysninger fra brugere gennem programmet.
 
-Når brugeren benytter bestemte funktioner, opretter programmet direkte forbindelse til tredjepartstjenester (NetEase Cloud Music, Soda Music og dets godkendelses- og medietjenester, React-CDN, LRCLIB og GitHub). Hvad der sendes, hvornår, og hvordan det kan styres, er beskrevet i afsnit 3.
+Når brugeren benytter bestemte funktioner, opretter programmet direkte forbindelse til tredjepartstjenester (NetEase Cloud Music, QQ Music, Soda Music og dets godkendelses-/medietjenester, React-CDN, LRCLIB, Open-Meteo og GitHub). Hvad der sendes, hvornår, og hvordan det kan styres, er beskrevet i afsnit 3.
 
 Denne politik gælder for WinUI 3-versionen af Klang Soda (2.x). Den tidligere PyQt6-version er ikke omfattet.
 
 ### 2. Data, der gemmes lokalt
 
-Programdata gemmes i `%LocalAppData%\KlangSoda` og bruges kun til programmets funktioner. Det lokale biblioteksindeks og indstillinger uploades ikke; data til konti og onlineafspilning er beskrevet i afsnit 3.
+Programdata gemmes i `%LocalAppData%\KlangSoda`. Biblioteksindeks og indstillinger uploades ikke; forespørgsler til konti og onlineafspilning er beskrevet i afsnit 3.
 
 | Placering | Indhold |
 | :--- | :--- |
-| `player_state.json` (og sikkerhedskopien `.bak`) | Bibliotekets indeks (filstier, tags, varighed, format), overvågede mapper, afspilningslister og smarte afspilningslister, favoritter, antal afspilninger og seneste afspilningstidspunkt, indlæringsdata til strejftilstand, analyseresultater pr. nummer (akustiske egenskaber, lydkvalitetsvurdering, BPM og toneart), tidsforskydning af sangtekster, indstillinger for grænseflade og lyd, vinduespositioner samt de krypterede loginoplysninger til NetEase Cloud Music |
+| `player_state.json` (og sikkerhedskopien `.bak`) | Bibliotekets indeks (filstier, tags, varighed, format), overvågede mapper, afspilningslister og smarte afspilningslister, favoritter, antal afspilninger og seneste afspilningstidspunkt, indlæringsdata til strejftilstand, analyseresultater pr. nummer (akustiske egenskaber, lydkvalitetsvurdering, BPM og toneart), tidsforskydning af sangtekster, indstillinger for grænseflade og lyd, vinduespositioner samt de krypterede loginoplysninger til NetEase Cloud Music og QQ Music |
 | `covers`, `CoversCache` | Coverbilleder udtrukket fra lydfiler eller hentet fra internettet |
-| `netease_cache` | Cachede lydfiler fra NetEase Cloud Music |
+| `netease_cache`, `qqmusic_cache` | Cachede lydfiler og coverbilleder fra NetEase Cloud Music og QQ Music |
 | `LyricsCache` | Sangtekster hentet fra LRCLIB |
+| `CustomCovers`, `LyricsChosen`, `Waveforms` | Tilpassede coverbilleder, valgte sangtekster og bølgeformcache |
+| `netease_cache/*_dyncover.mp4` | Lydløse videoer til animerede covere; MV-adresser gives til videoafspilleren frem for at blive gemt som almindelige lydcachefiler |
 | `soda/session.bin` | Separat Soda-cookie, konto-id, kaldenavn og avataradresse; samlet krypteret med DPAPI i den aktuelle Windows-brugers omfang |
 | `soda/device.json`, `soda/native/<version-hash>/` | Uafhængige enheds- og installations-id'er oprettet eller registreret til Klang Soda, registreringsstatus og offentlige native komponenter kopieret fra den lokale officielle 3.7.0-installation |
 | `soda/u_<konto-hash>/audio`, `soda/u_<konto-hash>/covers`, `soda/u_<konto-hash>/lyrics-v2` | Lyd-, cover- og linjebaseret sangtekstcache adskilt pr. Soda-konto; tilstandslister ligger i `soda/shared/modes`, og cache uden login bruger `soda/guest` |
@@ -225,28 +245,31 @@ Bemærkninger:
 - Oplysninger om det aktuelle nummer (titel, kunstner, cover, afspilningsposition) videregives til Windows' systemmediekontroller (SMTC) til låseskærm, lydstyrkeoverlay og medietaster. De bruges kun inden for det lokale system.
 - Afinstallation af programmet sletter ikke `%LocalAppData%\KlangSoda`.
 
+
 ### 3. Netværksforespørgsler
 
 | Funktion | Modtager | Data, der sendes | Udløser og styring |
 | :--- | :--- | :--- | :--- |
 | Automatisk udfyldning af cover, album og kunstner | NetEase Cloud Music (music.163.com og dets billedservere) | Et søgeord bestående af titel og kunstner; ved match forespørges cover og metadata via sang-id | Indstillinger → Bibliotek → "Udfyld cover og tekster automatisk"; kan slås fra |
+| NetEase-MV / animerede covere | NetEase-API og video-CDN | Sang-/MV-id, kvalitet og relevante loginoplysninger; videoserveren ser IP og forespørgselshoveder | MV startes ved klik; animerede covere kan slås fra i indstillingerne og kræver login, hvor det er nødvendigt |
 | Automatisk udfyldning af sangtekster | NetEase Cloud Music; LRCLIB (lrclib.net) | Til LRCLIB: titel, kunstner, album, varighed. Til NetEase: som i rækken ovenfor | Som ovenfor; "Søg sangtekst online" i tekstmenuen udløses manuelt |
 | NetEase-konto, cloud-bibliotek og afspilning | NetEase Cloud Music | Loginoplysninger (se afsnit 4), forespurgte afspilningslister og numre, søgeord | Kun når brugeren logger ind eller bruger cloud-siden |
-| Soda QR-login og sikkerhedsbekræftelse | Officielle Soda-godkendelsestjenester i WebView2 (f.eks. api.qishui.com, bff-pc.qishui.com og auth.zijieapi.com), CDN'er til bekræftelse / statiske ressourcer samt React-CDN (unpkg.com) | Aktuelle QR-login-, polling- og bekræftelsesforespørgsler samt webstedsdata i den midlertidige browsersession | Når Soda-loginvinduet åbnes; ressourcer indlæses efter behov i det officielle bekræftelsesforløb |
-| Soda-konto, anbefalinger, læsning af favoritter og autoriseret afspilning | api.qishui.com og tilladte medie- / billed-CDN'er | Aktuelle Klang Soda Soda-loginoplysninger, uafhængige enheds- og installations-id'er, system- / versions- / tidszoneoplysninger, forespurgte numre og afspilningslister, tilstand, batch og id'er på afspillede numre | Ved brug af Soda-siden, afspilning eller forhåndshentning; undgå forespørgslerne ved ikke at bruge funktionen |
-| Søgning efter opdateringer | GitHub (api.github.com) | En forespørgsel om udgivelsesliste uden personoplysninger | Kun når brugeren klikker "Søg efter opdateringer" under Indstillinger → Om; programmet søger ikke i baggrunden |
+| QQ Music-konto, cloud-bibliotek og afspilning | QQ Music (y.qq.com og dets API-, lyd- og billedservere); ved login med QR-kode kontaktes også QQ-login (ptlogin2.qq.com, graph.qq.com) eller WeChat Open Platform (open.weixin.qq.com) | Loginoplysninger (se afsnit 4), forespurgte afspilningslister og numre, søgeord | Kun når brugeren skifter cloud-siden til QQ Music og logger ind eller bruger den |
+| Vejreffekter | Open-Meteo (api.open-meteo.com, geocoding-api.open-meteo.com) | Ved søgning efter by: det indtastede bynavn og grænsefladens sprog. Derefter hvert 30. minut: den valgte bys bredde- og længdegrad, afrundet til to decimaler (ca. 1 km) | Kun når "Vejreffekter" er slået til under Indstillinger → Udseende, og en by er valgt; slået fra som standard; når den slås fra, stopper forespørgslerne |
+| Søgning efter opdateringer | GitHub (api.github.com) | En forespørgsel om udgivelsesliste uden personoplysninger | Én gang hver gang programmet starter (kan slås fra med "Søg efter opdateringer ved start" under Indstillinger → Om), og når brugeren klikker "Søg efter opdateringer"; intet downloades eller installeres automatisk |
 | Download af ny version | Standardbrowseren | Browseren åbner udgivelsessiden på GitHub | Kun når brugeren klikker på download |
+| Soda QR-login og sikkerhedsbekræftelse | Officielle Soda-godkendelsestjenester i WebView2 (f.eks. api.qishui.com, bff-pc.qishui.com og auth.zijieapi.com), CDN'er til bekræftelse / statiske ressourcer samt React-CDN (unpkg.com) | Aktuelle QR-login-, polling- og bekræftelsesforespørgsler samt webstedsdata i den midlertidige browsersession | Når Soda-loginvinduet åbnes; ressourcer indlæses efter behov i det officielle bekræftelsesforløb |
+| Soda-konto, anbefalinger, læsning af favoritter og autoriseret afspilning | api.qishui.com og tilladte medie- / billed-CDN'er | Aktuelle Klang Soda-loginoplysninger, uafhængige enheds- og installations-id'er, system- / versions- / tidszoneoplysninger, forespurgte numre og afspilningslister, tilstand, batch og id'er på afspillede numre | Ved brug af Soda-siden, afspilning eller forhåndshentning; undgå forespørgslerne ved ikke at bruge funktionen |
 
-Programmets API-forespørgsler bruger HTTPS; downloadadresser til coverbilleder og lydfiler returneres af NetEase Cloud Music og bruges, som de leveres. Som ved enhver netværkstjeneste kan modtagerne se afsenderens IP-adresse og almindelige forespørgselshoveder. Deres behandling heraf er underlagt deres egne privatlivspolitikker, som udvikleren ikke har kontrol over.
+Programmets API-forespørgsler bruger HTTPS; downloadadresser til coverbilleder og lydfiler returneres af NetEase Cloud Music og QQ Music; kun adresser på den pågældende platforms domæner accepteres. Som ved enhver netværkstjeneste kan modtagerne se afsenderens IP-adresse og almindelige forespørgselshoveder. Deres behandling heraf er underlagt deres egne privatlivspolitikker, som udvikleren ikke har kontrol over.
+
 
 Soda-medier og covere hentes kun via HTTPS fra tilladte domæner, og omdirigeringer kontrolleres. CDN-downloads vedhæfter ikke kontocookies. Soda API-klienten sender kun cookien fra det aktuelle login til `api.qishui.com`; login-WebView2 udveksler fortsat data med de relevante websteder under den officielle godkendelse. Favoritter kan læses og vises sidevis; Klang Soda tilføjer eller fjerner ikke favoritter hos Soda.
 
-### 4. Konti og loginoplysninger
+### 4. Cloud-konti og loginoplysninger
 
-#### NetEase Cloud Music
-
-- Der logges ind med QR-kode eller ved manuelt at indsætte en cookie. Programmet indhenter eller gemmer ikke brugerens NetEase-adgangskode.
-- Den cookie, der opnås ved login, krypteres med Windows Data Protection API (DPAPI, aktuel brugers omfang) og gemmes i `player_state.json`. Kun den samme Windows-brugerkonto kan dekryptere den.
+- NetEase Cloud Music logges ind med QR-kode eller ved manuelt at indsætte en cookie; QQ Music logges ind ved at scanne en QR-kode med QQ eller WeChat. Programmet indhenter eller gemmer ikke brugerens adgangskode til NetEase, QQ eller WeChat.
+- De loginoplysninger, der opnås ved login (NetEase-cookien, QQ Musics login-token), krypteres med Windows Data Protection API (DPAPI, aktuel brugers omfang) og gemmes i `player_state.json`. Kun den samme Windows-brugerkonto kan dekryptere den.
 - Når brugeren logger ud under Indstillinger, slettes oplysningerne fra hukommelsen og disken.
 - En indsat cookie er en loginoplysning med vide rettigheder. Indsæt den ikke på en computer, du ikke har tillid til, og del ikke `player_state.json` med andre.
 
@@ -257,23 +280,26 @@ Soda-medier og covere hentes kun via HTTPS fra tilladte domæner, og omdirigerin
 - Når brugeren logger ud på Soda-startsiden, ryddes loginoplysningerne fra hukommelsen, og `session.bin` slettes. Enheds-id'er, native komponenter samt kontoens lyd-, cover- og sangtekstcache bevares.
 - Alle lokale Soda-data fjernes ved at lukke Klang Soda og slette mappen `soda` i datamappen. Cachefiler er almindelige filer; hashbaserede kontomapper giver adskillelse, ikke kryptering.
 
+
 ### 5. Tredjepartstjenester
 
 De tredjepartstjenester, Klang Soda bruger, har deres egne privatlivspolitikker og vilkår. Ved at bruge den pågældende funktion sendes de beskrevne data til den respektive udbyder:
 
 - NetEase Cloud Music: <https://music.163.com>
+- QQ Music: <https://y.qq.com>
+- LRCLIB: <https://lrclib.net>
+- Open-Meteo: <https://open-meteo.com/en/terms>
+- GitHub: <https://docs.github.com/site-policy/privacy-policies/github-general-privacy-statement>
+
 - Soda Music API og dets godkendelses- / medietjenester: <https://api.qishui.com>
 - React-CDN (ressourcer til loginbekræftelse): <https://unpkg.com>
-- LRCLIB: <https://lrclib.net>
-- GitHub: <https://docs.github.com/site-policy/privacy-policies/github-general-privacy-statement>
 
 ### 6. Brugerens kontrol
 
 - Når "Udfyld cover og tekster automatisk" er slået fra, slår programmet ikke længere metadata eller sangtekster op online for lokale numre.
-- Hvis brugeren ikke logger ind på NetEase og ikke bruger "Søg efter opdateringer" eller "Søg sangtekst online", sendes de tilsvarende forespørgsler ikke.
-- Undlad at åbne Soda-siden eller loginvinduet og afspille Soda-numre for at undgå de tilsvarende forespørgsler.
+- Hvis brugeren ikke logger ind på NetEase Cloud Music eller QQ Music, ikke slår "Vejreffekter" til, slår "Søg efter opdateringer ved start" fra og ikke bruger "Søg efter opdateringer" eller "Søg sangtekst online", sendes de tilsvarende forespørgsler ikke.
 - Alle lokale data fjernes ved at lukke programmet og slette mappen `%LocalAppData%\KlangSoda`.
-- NetEase-lydcachen kan ryddes særskilt under Indstillinger → Netværk.
+- Cloud-lydcachen kan ryddes særskilt under Indstillinger → Netværk.
 
 ### 7. Sikkerhed
 

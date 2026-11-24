@@ -107,7 +107,7 @@
                             Glyph="&#xE8D6;" />
                         <Image
                             x:Name="MiniCoverImage"
-                            Stretch="UniformToFill"
+                            Stretch="UniformToFill" HorizontalAlignment="Center" VerticalAlignment="Center"
                             Visibility="Collapsed" />
                     </Grid>
                 </Border>

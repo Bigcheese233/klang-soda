@@ -27,7 +27,10 @@
                     Height="380"
                     CornerRadius="18"
                     Background="#22FFFFFF">
-                    <Image x:Name="CoverImage" Stretch="UniformToFill" />
+                    <Grid>
+                        <Image x:Name="CoverImage" Stretch="UniformToFill" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        <controls:DynamicCoverView x:Name="DynamicCover" ClipRadius="18" />
+                    </Grid>
                 </Border>
                 <StackPanel Width="380" Spacing="4">
                     <TextBlock

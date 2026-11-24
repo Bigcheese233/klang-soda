@@ -32,7 +32,8 @@ public class LibraryService
     public LibraryService()
     {
         _coversCacheDir = Path.Combine(
-            StateService.ResolveDataDirectory(), "CoversCache"
+            StateService.ResolveDataDirectory(),
+            "CoversCache"
         );
         Directory.CreateDirectory(_coversCacheDir);
     }
@@ -193,7 +194,7 @@ public class LibraryService
                 Album = t.Album,
                 Duration = t.Duration,
                 FilePath = t.FilePath,
-                CoverPath = t.CoverPath ?? "",
+                CoverPath = t.OriginalCoverPath ?? "",   // 存原始封面；自定义封面另存在 CustomCovers
                 IsFavorite = t.IsFavorite,
                 SampleRate = t.SampleRate,
                 BitDepth = t.BitDepth,
@@ -359,10 +360,11 @@ public class LibraryService
                 QualityAnalysisService.Instance.Enqueue(new[] { existing });
                 RhythmAnalysisService.Instance.Enqueue(new[] { existing });
                 AudioFeatureService.Instance.Enqueue(new[] { existing });
-                if (!string.IsNullOrEmpty(t.CoverPath)) existing.CoverPath = t.CoverPath;
+                if (!string.IsNullOrEmpty(t.OriginalCoverPath)) existing.CoverPath = t.OriginalCoverPath;
                 existing.IsMissing = false;
                 continue;
             }
+            if (Excluded.Contains(ExcludeKey(t))) continue;   // 用户移除过的歌曲，扫描时不再加回
             if (!known.Add(t.Id)) continue;
             t.AddedTimestamp = now;
             // 之前不可用的同 ID 曲目重新出现：沿用收藏状态
@@ -396,8 +398,38 @@ public class LibraryService
         return all;
     }
 
+    #region 移除后不再被扫描加回
+
+    // 以前从曲库移除的歌曲，只要文件还在监视的文件夹里，下次扫描（启动、文件变动、手动重新扫描）就会被加回来
+    private HashSet<string>? _excluded;
+    private HashSet<string> Excluded => _excluded ??= new(State.ExcludedFiles, StringComparer.OrdinalIgnoreCase);
+
+    private static string ExcludeKey(TrackItem t) => t.IsCueTrack ? t.FilePath + "#" + t.CueTrackNum : t.FilePath;
+
+    private void Exclude(IEnumerable<TrackItem> tracks)
+    {
+        bool changed = false;
+        foreach (var t in tracks)
+        {
+            if (t.IsOnline || string.IsNullOrEmpty(t.FilePath)) continue;
+            if (Excluded.Add(ExcludeKey(t))) changed = true;
+        }
+        if (changed) State.ExcludedFiles = Excluded.ToList();
+    }
+
+    /// <summary>用户再次手动导入某个文件夹时，恢复其中之前被移除的歌曲。</summary>
+    public void ForgetExclusionsUnder(string folder)
+    {
+        var prefix = folder.TrimEnd('\\', '/') + Path.DirectorySeparatorChar;
+        if (Excluded.RemoveWhere(p => p.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) > 0)
+            State.ExcludedFiles = Excluded.ToList();
+    }
+
+    #endregion
+
     public void RemoveTrack(TrackItem track)
     {
+        Exclude(new[] { track });
         Tracks.Remove(track);
         _unavailable.Remove(track.Id);
         foreach (var list in State.CustomPlaylists.Values) list.RemoveAll(id => id == track.Id);
@@ -410,6 +442,8 @@ public class LibraryService
         Tracks.Clear();
         _unavailable.Clear();
         State.WatchedFolders.Clear();
+        State.ExcludedFiles.Clear();
+        _excluded = null;
         State.LastTrackId = "";
         foreach (var key in State.CustomPlaylists.Keys.ToList()) State.CustomPlaylists[key].Clear();
         SaveLibrary();
@@ -423,10 +457,13 @@ public class LibraryService
     }
 
     /// <summary>批量从曲库移除（只改曲库，不动磁盘上的文件），只保存一次。</summary>
-    public void RemoveTracks(IEnumerable<TrackItem> tracks)
+    /// <param name="exclude">记下这些歌曲，之后扫描时不再加回；清理丢失文件时传 false（文件找回来后还能自动加回）</param>
+    public void RemoveTracks(IEnumerable<TrackItem> tracks, bool exclude = true)
     {
-        var ids = new HashSet<string>(tracks.Select(t => t.Id));
+        var removing = tracks.ToList();
+        var ids = new HashSet<string>(removing.Select(t => t.Id));
         if (ids.Count == 0) return;
+        if (exclude) Exclude(removing);
         Tracks.RemoveAll(t => ids.Contains(t.Id));
         foreach (var id in ids) _unavailable.Remove(id);
         foreach (var list in State.CustomPlaylists.Values) list.RemoveAll(ids.Contains);
@@ -1017,7 +1054,7 @@ public class LibraryService
                 Album = !string.IsNullOrWhiteSpace(sheet.Album) ? sheet.Album : baseTrack.Album,
                 Duration = end > start ? end - start : 0,
                 FilePath = sheet.AudioFilePath,
-                CoverPath = baseTrack.CoverPath,
+                CoverPath = baseTrack.OriginalCoverPath,
                 FormatBadge = baseTrack.FormatBadge,
                 SampleRate = baseTrack.SampleRate,
                 BitDepth = baseTrack.BitDepth,

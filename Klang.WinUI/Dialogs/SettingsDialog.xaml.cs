@@ -57,7 +57,11 @@ public sealed partial class SettingsDialog : ContentDialog
         WeatherService.Instance.Updated += OnWeatherUpdated;
         Closed += (s, e) => WeatherService.Instance.Updated -= OnWeatherUpdated;
         LyricWordMotionSwitch.IsOn = State.LyricWordMotion;
+        SelectByTag(LyricFrameRateBox, State.LyricFrameRate.ToString(), "0");
         AutoMetaSwitch.IsOn = State.AutoFetchMetadata;
+        DynamicCoverSwitch.IsOn = State.DynamicCover;
+        SelectByTag(CloseActionBox, State.CloseAction, "ask");
+        AutoCheckUpdateSwitch.IsOn = State.AutoCheckUpdate;
         SelectByTag(CacheLimitBox, State.NeteaseCacheLimitMb.ToString(), "2048");
         RefreshCacheInfo();
 
@@ -126,6 +130,32 @@ public sealed partial class SettingsDialog : ContentDialog
         State.ShowVinylDisc = VinylDiscSwitch.IsOn;
         StateService.Instance.RequestSave();
         Controls.VinylCoverCard.NotifyVinylDiscSettingChanged();
+    }
+
+    private void LyricFrameRateBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_loading || LyricFrameRateBox.SelectedItem is not ComboBoxItem { Tag: string tag } || !int.TryParse(tag, out int fps)) return;
+        State.LyricFrameRate = fps;   // 歌词控件每帧读取，立即生效
+        StateService.Instance.RequestSave();
+    }
+
+    private void CloseActionBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_loading || CloseActionBox.SelectedItem is not ComboBoxItem { Tag: string tag }) return;
+        State.CloseAction = tag;
+        StateService.Instance.RequestSave();
+        App.MainWindowInstance?.UpdateTrayIcon();   // 选“退出程序”时不再显示托盘图标
+    }
+
+    /// <summary>“动态封面”开关改动后触发（主窗口据此为当前歌曲加载或移除动态封面）。</summary>
+    public static event Action? DynamicCoverSettingChanged;
+
+    private void DynamicCoverSwitch_Toggled(object sender, RoutedEventArgs e)
+    {
+        if (_loading) return;
+        State.DynamicCover = DynamicCoverSwitch.IsOn;
+        StateService.Instance.RequestSave();
+        DynamicCoverSettingChanged?.Invoke();
     }
 
     #region 沉浸背景氛围
@@ -256,6 +286,35 @@ public sealed partial class SettingsDialog : ContentDialog
     #region 关于 / 检查更新
 
     private UpdateInfo? _update;
+
+    // ---- 彩蛋：3 秒内连点图标 5 次开关 ----
+    public static event Action<bool>? EasterEggChanged;
+    private int _logoTaps;
+    private DateTime _logoFirstTap;
+
+    private void AppLogo_Tapped(object sender, Microsoft.UI.Xaml.Input.TappedRoutedEventArgs e)
+    {
+        var now = DateTime.UtcNow;
+        if (_logoTaps == 0 || (now - _logoFirstTap).TotalSeconds > 3) { _logoTaps = 0; _logoFirstTap = now; }
+        if (++_logoTaps < 5)
+        {
+            if (sender is FrameworkElement el) UiAnimations.Bounce(el, 0.9f, 1.08f, 220);
+            return;
+        }
+        _logoTaps = 0;
+        State.EasterEgg = !State.EasterEgg;
+        StateService.Instance.RequestSave();
+        AppVersionText.Text = State.EasterEgg ? L.T("发现彩蛋：看看封面上面 ♪") : L.T("彩蛋已关闭");
+        if (sender is FrameworkElement fe) UiAnimations.Spin(fe);
+        EasterEggChanged?.Invoke(State.EasterEgg);
+    }
+
+    private void AutoCheckUpdateSwitch_Toggled(object sender, RoutedEventArgs e)
+    {
+        if (_loading) return;
+        State.AutoCheckUpdate = AutoCheckUpdateSwitch.IsOn;
+        StateService.Instance.RequestSave();
+    }
 
     private async void CheckUpdateBtn_Click(object sender, RoutedEventArgs e)
     {
@@ -429,7 +488,7 @@ public sealed partial class SettingsDialog : ContentDialog
         if (AutoMetaSwitch.IsOn) MetadataService.Instance.Enqueue(LibraryService.Instance.Tracks);
     }
 
-    #region 网易云缓存
+    #region 云端缓存（所有来源合计）
 
     private static string FormatBytes(long b) =>
         b >= 1L << 30 ? $"{b / (double)(1L << 30):0.##} GB" :
@@ -437,7 +496,12 @@ public sealed partial class SettingsDialog : ContentDialog
 
     private void RefreshCacheInfo()
     {
-        var (count, bytes) = Services.Netease.NeteaseService.Instance.GetCacheInfo();
+        int count = 0; long bytes = 0;
+        foreach (var src in Services.Cloud.CloudSources.All)
+        {
+            var (c, b) = src.GetCacheInfo();
+            count += c; bytes += b;
+        }
         CacheInfoText.Text = L.F("已缓存 {0} 首，占用 {1}", count, FormatBytes(bytes));
     }
 
@@ -450,7 +514,12 @@ public sealed partial class SettingsDialog : ContentDialog
 
     private void ClearCacheBtn_Click(object sender, RoutedEventArgs e)
     {
-        var (n, bytes) = Services.Netease.NeteaseService.Instance.ClearCache();
+        int n = 0; long bytes = 0;
+        foreach (var src in Services.Cloud.CloudSources.All)
+        {
+            var (f, b) = src.ClearCache();
+            n += f; bytes += b;
+        }
         RefreshCacheInfo();
         CacheInfoText.Text += L.F("（已清理 {0} 个文件，释放 {1}）", n, FormatBytes(bytes));
     }

@@ -183,17 +183,18 @@ public static class LyricPickerDialog
         }
         int offlineCount = Count();
 
-        // 当前自动使用的网易云版本（选中时才联网读取）
-        string autoId = track.IsOnline ? track.NeteaseId : track.MetaNeteaseId;
-        if (!string.IsNullOrEmpty(autoId))
+        // 当前自动使用的版本（选中时才联网读取）：云端曲目取它所属平台的歌词，本地曲目取自动补全时匹配到的网易云歌曲
+        Services.Cloud.ICloudSource? autoSource = track.IsOnline ? Services.Cloud.CloudSources.For(track) : NeteaseService.Instance;
+        string autoId = track.IsOnline ? track.CloudId : track.MetaNeteaseId;
+        if (autoSource != null && !string.IsNullOrEmpty(autoId))
             Add(new Candidate
             {
                 Source = "netease-auto",
-                Title = track.IsOnline ? L.T("网易云 · 这首歌的歌词") : L.T("网易云 · 自动匹配的版本"),
-                Detail = track.IsOnline ? L.T("网易云提供的默认歌词") : L.T("自动补全信息时匹配到的歌曲"),
+                Title = track.IsOnline ? L.F("{0} · 这首歌的歌词", autoSource.DisplayName) : L.T("网易云 · 自动匹配的版本"),
+                Detail = track.IsOnline ? L.F("{0}提供的默认歌词", autoSource.DisplayName) : L.T("自动补全信息时匹配到的歌曲"),
                 Load = async c =>
                 {
-                    var b = await NeteaseService.Instance.GetLyricsAsync(autoId, c);
+                    var b = await autoSource.GetLyricsAsync(autoId, c);
                     return string.IsNullOrWhiteSpace(b.Lrc) ? null : new LyricsService.LyricSet(b.Lrc, b.Trans, b.Roma);
                 }
             });
@@ -219,7 +220,7 @@ public static class LyricPickerDialog
                 foreach (var s in await neTask)
                 {
                     if (ct.IsCancellationRequested) return;
-                    string id = s.NeteaseId;
+                    string id = s.CloudId;
                     Add(new Candidate
                     {
                         Source = "netease",

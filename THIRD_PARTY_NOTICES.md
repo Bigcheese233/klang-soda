@@ -20,7 +20,13 @@ Klang Soda 源自 [gwj0323/klang](https://github.com/gwj0323/klang)，保留上�
 
 官方汽水音乐的 `device.node`、`bdms.node`、`metasecml.dll` 不随源码或发布包分发；程序使用本机固定版本的公共组件。它们的权利归原权利人所有，本项目没有把它们改为自身许可。
 
+## 2.8.0 同步的来源
+
+QQ 音乐、网易云 MV/动态封面、托盘及关于页彩蛋相关实现与资源随上游 2.8.0 同步，来源提交为 [`e39735c`](https://github.com/gwj0323/klang/commit/e39735cfd79e12c31fc14d938efe71e990b08078)。这些功能沿用上游归属，不属于本项目另行原创。汽水适配器由本项目维护；未新增第三方闭源二进制。
+
 ## 主要 WinUI 依赖与上游引用
+
+QQ 音乐请求格式、签名与扫码流程沿用上游对 [luren-dc/QQMusicApi](https://github.com/luren-dc/QQMusicApi) 的参考和 C# 重写，原标注为 GPL-3.0，见 `QQMusicClient.cs` 文件头及上游说明。
 
 | 项目 | 许可 / 用途 |
 | --- | --- |

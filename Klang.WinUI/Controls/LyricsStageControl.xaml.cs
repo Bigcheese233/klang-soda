@@ -179,8 +179,9 @@ public sealed partial class LyricsStageControl : UserControl
         _resumeTimer.Tick += (s, e) => ResumeAutoCenter();
 
         UpdateColors();
-        ActualThemeChanged += (s, e) => { UpdateColors(); LyricsCanvas.Invalidate(); };
+        ActualThemeChanged += (s, e) => { UpdateColors(); RequestRender(); };
         Unloaded += (s, e) => StopLoop();
+        Loaded += (s, e) => RequestRender();   // 交换链不会自己重画：重新进入界面时补画一帧
         EmphasisChanged += OnEmphasisChanged;
         Unloaded += (s, e) => EmphasisChanged -= OnEmphasisChanged;
     }
@@ -226,6 +227,29 @@ public sealed partial class LyricsStageControl : UserControl
         LoadLyricLines(LyricsService.Instance.LoadLyrics(audioFilePath));
     }
 
+    private bool _swapPairs;
+
+    /// <summary>
+    /// 本地双语歌词“原文与翻译对调”（按歌曲记住，由主窗口在换歌时设置）。
+    /// 只影响同一时间标签合并出来的行；改动后立即对当前歌词生效。
+    /// </summary>
+    public bool SwapPairs
+    {
+        get => _swapPairs;
+        set
+        {
+            if (_swapPairs == value) return;
+            _swapPairs = value;
+            if (Lyrics.Count == 0) return;
+            foreach (var l in Lyrics) l.SwapPair();
+            foreach (var r in _rows) r.WordRects = null;
+            Rebuild(snap: true);
+        }
+    }
+
+    /// <summary>当前歌词里有没有可以对调的双语行。</summary>
+    public bool HasPairedLines => Lyrics.Any(l => l.PairedTranslation);
+
     /// <summary>直接载入已解析好的歌词（云端歌词）。</summary>
     public void LoadLyricLines(IList<LyricLine> lines)
     {
@@ -234,6 +258,7 @@ public sealed partial class LyricsStageControl : UserControl
         Lyrics.Clear();
         foreach (var l in lines)
         {
+            if (_swapPairs) l.SwapPair();
             l.MainFontSize = _lyricFontSize;
             l.SubMode = _subMode;
             l.PropertyChanged += Line_PropertyChanged;
@@ -247,7 +272,7 @@ public sealed partial class LyricsStageControl : UserControl
     private void Line_PropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         // 逐字进度推进 → 只需要重绘，不需要重新排版
-        if (e.PropertyName == nameof(LyricLine.PlayedWords)) LyricsCanvas.Invalidate();
+        if (e.PropertyName == nameof(LyricLine.PlayedWords)) RequestRender();
     }
 
     // ================= 播放进度驱动 =================
@@ -431,7 +456,7 @@ public sealed partial class LyricsStageControl : UserControl
     /// </summary>
     private void Rebuild(bool snap, bool keepScroll = false)
     {
-        if (_rows.Count == 0) { LyricsCanvas.Invalidate(); return; }
+        if (_rows.Count == 0) { RequestRender(); return; }
         if (snap) { _layoutCache.Clear(); _subCache.Clear(); foreach (var r in _rows) r.WordRects = null; }
 
         var dev = CanvasDevice.GetSharedDevice();
@@ -498,7 +523,7 @@ public sealed partial class LyricsStageControl : UserControl
         }
         if (!snap && !keepScroll) { _omega = 11.0; _zeta = 0.8; }   // 自动换句：轻微欠阻尼，到位时有一点点回弹
 
-        if (snap) LyricsCanvas.Invalidate();
+        if (snap) RequestRender();
         else StartLoop();
     }
 
@@ -542,7 +567,22 @@ public sealed partial class LyricsStageControl : UserControl
         if (_looping) return;
         _looping = true;
         _lastFrame = _clock.Elapsed.TotalSeconds;
+        _nextFrameAt = 0;   // 开始后的第一帧立即画
         Microsoft.UI.Xaml.Media.CompositionTarget.Rendering += OnRendering;
+    }
+
+    // ---- 帧率上限（设置 → 歌词帧率；0 = 跟随显示器刷新率）----
+    private double _nextFrameAt;
+
+    /// <summary>这一次显示器刷新是否轮到画歌词。按“下一帧应在何时”累加，高刷屏上限 60 时是 2、3 个刷新交替画一次，平均正好 60。</summary>
+    private bool FrameDue(double now)
+    {
+        int cap = StateService.Instance.State.LyricFrameRate;
+        if (cap <= 0) return true;
+        double interval = 1.0 / cap;
+        if (now + 0.002 < _nextFrameAt) return false;   // 留 2 ms 余量：刷新时刻有抖动
+        _nextFrameAt = now - _nextFrameAt > interval ? now + interval : _nextFrameAt + interval;   // 落后太多（刚开始 / 卡顿后）就从现在重新算
+        return true;
     }
 
     private void StopLoop()
@@ -552,9 +592,52 @@ public sealed partial class LyricsStageControl : UserControl
         Microsoft.UI.Xaml.Media.CompositionTarget.Rendering -= OnRendering;
     }
 
+    // ---- 帧时间统计（环境变量 KLANG_LYRIC_TRACE=1 时开启，每 2 秒写一行到数据目录的 lyric_trace.log）----
+    private static readonly bool Trace = Environment.GetEnvironmentVariable("KLANG_LYRIC_TRACE") == "1";
+    private int _trTicks, _trDraws, _trBlurRows;
+    private double _trDrawSum, _trDrawMax, _trWindowStart, _trLastDraw;
+    private readonly List<double> _trTickGaps = new(), _trDrawGaps = new();
+    private double _trLastTick;
+
+    private void TraceTick(double now)
+    {
+        if (_trLastTick > 0 && now - _trLastTick < 0.1) _trTickGaps.Add(now - _trLastTick);   // 只统计动画进行中的间隔
+        _trLastTick = now;
+        _trTicks++;
+        if (_trWindowStart == 0) _trWindowStart = now;
+        if (now - _trWindowStart < 3) return;
+        static string Stat(List<double> g)
+        {
+            if (g.Count == 0) return "-";
+            g.Sort();
+            double med = g[g.Count / 2] * 1000, p90 = g[(int)(g.Count * 0.9)] * 1000;
+            return $"n{g.Count} med {med:F1}ms ({1000 / med:F0}fps) p90 {p90:F1}ms";
+        }
+        try
+        {
+            System.IO.File.AppendAllText(System.IO.Path.Combine(StateService.ResolveDataDirectory(), "lyric_trace.log"),
+                $"{DateTime.Now:HH:mm:ss} tick {Stat(_trTickGaps)} | draw {Stat(_trDrawGaps)} cpu avg {(_trDraws > 0 ? _trDrawSum / _trDraws : 0):F2}ms max {_trDrawMax:F2}ms | blurRows {(_trDraws > 0 ? (double)_trBlurRows / _trDraws : 0):F1}\n");
+        }
+        catch { }
+        _trTicks = _trDraws = _trBlurRows = 0;
+        _trDrawSum = _trDrawMax = 0;
+        _trTickGaps.Clear(); _trDrawGaps.Clear();
+        _trWindowStart = now;
+    }
+
+    private void TraceDraw(double ms)
+    {
+        double now = _clock.Elapsed.TotalSeconds;
+        if (_trLastDraw > 0 && now - _trLastDraw < 0.1) _trDrawGaps.Add(now - _trLastDraw);
+        _trLastDraw = now;
+        _trDraws++; _trDrawSum += ms; _trDrawMax = Math.Max(_trDrawMax, ms);
+    }
+
     private void OnRendering(object? sender, object e)
     {
         double now = _clock.Elapsed.TotalSeconds;
+        if (Trace) TraceTick(now);
+        if (!FrameDue(now)) return;   // 动画按真实时间计算，跳过的刷新不影响动画速度
         double dt = Math.Min(0.05, now - _lastFrame);
         _lastFrame = now;
 
@@ -580,7 +663,7 @@ public sealed partial class LyricsStageControl : UserControl
             if (Math.Abs(r.TargetY - r.Y) < 0.05 && Math.Abs(r.VY) < 1.0) { r.Y = r.TargetY; r.VY = 0; } else moving = true;
         }
 
-        LyricsCanvas.Invalidate();
+        RenderFrame();
         if (!moving && !KaraokeRunning()) StopLoop();
     }
 
@@ -663,13 +746,58 @@ public sealed partial class LyricsStageControl : UserControl
 
     // ================= 绘制 =================
 
-    private void LyricsCanvas_Draw(CanvasControl sender, CanvasDrawEventArgs args)
-    {
-        if (_rows.Count == 0) return;
+    private CanvasSwapChain? _swapChain;
 
-        var ds = args.DrawingSession;
+    /// <summary>请求重画一帧：交给渲染循环（画一帧；没有动画在进行时随即停下）。</summary>
+    private void RequestRender() => StartLoop();
+
+    /// <summary>
+    /// 在 CompositionTarget.Rendering 里同步画完这一帧并立即呈现，每个显示器刷新周期都能画一次。
+    /// （以前用 CanvasControl.Invalidate，它要到下一帧才真正画，逐帧请求时实际只有刷新率的一半。）
+    /// </summary>
+    private void RenderFrame()
+    {
+        double w = LyricsCanvas.ActualWidth, h = LyricsCanvas.ActualHeight;
+        if (w < 1 || h < 1 || LyricsCanvas.Visibility != Visibility.Visible) return;
+        float dpi = (float)((XamlRoot?.RasterizationScale ?? 1.0) * 96.0);
+        var dev = CanvasDevice.GetSharedDevice();
+        long t0 = Trace ? Stopwatch.GetTimestamp() : 0;
+        try
+        {
+            if (_swapChain == null || _swapChain.Device != dev)
+            {
+                _swapChain = new CanvasSwapChain(dev, (float)w, (float)h, dpi);
+                LyricsCanvas.SwapChain = _swapChain;
+            }
+            else if (Math.Abs(_swapChain.Size.Width - w) > 0.5 || Math.Abs(_swapChain.Size.Height - h) > 0.5 || Math.Abs(_swapChain.Dpi - dpi) > 0.1)
+            {
+                _swapChain.ResizeBuffers((float)w, (float)h, dpi);
+            }
+
+            using (var ds = _swapChain.CreateDrawingSession(Microsoft.UI.Colors.Transparent))
+            {
+                if (_rows.Count > 0) DrawRows(ds, dev);
+            }
+            _swapChain.Present(0);   // 节奏已经由 CompositionTarget.Rendering 跟显示器同步，这里不再等垂直同步
+        }
+        catch (Exception ex) when (dev.IsDeviceLost(ex.HResult))
+        {
+            // 显卡驱动重置等：丢掉和旧设备绑定的资源，下一帧用新设备重建
+            dev.RaiseDeviceLost();
+            _swapChain = null;
+            _layoutCache.Clear();
+            _subCache.Clear();
+            foreach (var r in _rows) r.WordRects = null;
+        }
+        finally
+        {
+            if (Trace) TraceDraw(Stopwatch.GetElapsedTime(t0).TotalMilliseconds);
+        }
+    }
+
+    private void DrawRows(CanvasDrawingSession ds, CanvasDevice dev)
+    {
         ds.TextAntialiasing = CanvasTextAntialiasing.Grayscale;
-        var dev = sender.Device;
         double dpi = XamlRoot?.RasterizationScale ?? 1.0;
         double viewH = ViewH;
         double padX = SidePad;
@@ -719,8 +847,9 @@ public sealed partial class LyricsStageControl : UserControl
             float blur = row.Blur;
             if (blur > 0.05f)
             {
+                if (Trace) _trBlurRows++;
                 // 景深模糊：把这一行先录进命令列表，再整体做高斯模糊（GPU 上完成）
-                using var cl = new CanvasCommandList(sender);
+                using var cl = new CanvasCommandList(dev);
                 using (var cds = cl.CreateDrawingSession())
                 {
                     cds.TextAntialiasing = CanvasTextAntialiasing.Grayscale;
@@ -951,12 +1080,12 @@ public sealed partial class LyricsStageControl : UserControl
     private void Viewport_PointerMoved(object sender, PointerRoutedEventArgs e)
     {
         int h = RowAt(e.GetCurrentPoint(Viewport).Position.Y);
-        if (h != _hover) { _hover = h; LyricsCanvas.Invalidate(); }
+        if (h != _hover) { _hover = h; RequestRender(); }
     }
 
     private void Viewport_PointerExited(object sender, PointerRoutedEventArgs e)
     {
-        if (_hover != -1) { _hover = -1; LyricsCanvas.Invalidate(); }
+        if (_hover != -1) { _hover = -1; RequestRender(); }
     }
 
     private void Viewport_PointerPressed(object sender, PointerRoutedEventArgs e)

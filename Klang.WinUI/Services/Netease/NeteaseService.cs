@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -10,26 +10,30 @@ using System.Text.Json.Nodes;
 using System.Threading;
 using System.Threading.Tasks;
 using Klang_WinUI.Models;
+using Klang_WinUI.Services.Cloud;
 using QRCoder;
 
 namespace Klang_WinUI.Services.Netease;
 
-public sealed class NeteasePlaylist
-{
-    public long Id { get; init; }
-    public string Name { get; init; } = "";
-    public int TrackCount { get; init; }
-    public bool IsLiked { get; init; }
-    public string CountText => L.F("{0} 首", TrackCount);
-}
-
 /// <summary>网易云业务层（对应 Qt 版 netease_service）：登录、歌单、搜索、取音源与缓存、歌词。</summary>
-public sealed class NeteaseService
+public sealed class NeteaseService : ICloudSource
 {
     private static readonly Lazy<NeteaseService> _instance = new(() => new NeteaseService());
     public static NeteaseService Instance => _instance.Value;
 
-    public static readonly (string Key, string Label)[] Qualities =
+    public string Key => CloudSources.NeteaseKey;
+    public string DisplayName => L.T("网易云音乐");
+    public IReadOnlyList<(string Key, string Label)> QrModes { get; } = new[] { ("app", "") };
+    public string QrHintFor(string mode) => L.T("用网易云音乐 App 扫码登录");
+    public string DailyRecommendTitle => L.T("每日推荐");
+    public bool SupportsCookieLogin => true;
+    public string CookieHint => L.T("粘贴 MUSIC_U 或整段 Cookie");
+    public bool HasDailyRecommend => true;
+    public bool IsTrustedUrl(string? url) => NetGuard.IsNeteaseUrl(url);
+
+    public IReadOnlyList<(string Key, string Label)> Qualities => QualityList;
+
+    private static readonly (string Key, string Label)[] QualityList =
     {
         ("standard", L.T("标准 128k")),
         ("higher", L.T("极高 320k")),
@@ -54,7 +58,7 @@ public sealed class NeteaseService
 
     public string PreferredQuality
     {
-        get => Qualities.Any(q => q.Key == State.NeteaseQuality) ? State.NeteaseQuality : "lossless";
+        get => QualityList.Any(q => q.Key == State.NeteaseQuality) ? State.NeteaseQuality : "lossless";
         set
         {
             State.NeteaseQuality = value;
@@ -151,7 +155,7 @@ public sealed class NeteaseService
     }
 
     /// <summary>申请二维码；返回 unikey 与 PNG 字节。</summary>
-    public async Task<(string Key, byte[] Png)> CreateQrAsync()
+    public async Task<(string Key, byte[] Png)> CreateQrAsync(string mode)
     {
         if (!IsLoggedIn) _client.ResetCookies();
         var res = await _client.WeapiAsync("/weapi/login/qrcode/unikey", new JsonObject { ["type"] = 1 });
@@ -165,8 +169,8 @@ public sealed class NeteaseService
         return (key, png);
     }
 
-    /// <summary>轮询扫码状态：800 过期，801 等待扫码，802 待确认，803 成功，-1 出错。</summary>
-    public async Task<(int Code, string Message)> PollQrAsync(string key)
+    /// <summary>轮询扫码状态。网易云的返回码：800 过期，801 等待扫码，802 待确认，803 成功。</summary>
+    public async Task<(QrLoginState State, string Message)> PollQrAsync(string key)
     {
         try
         {
@@ -174,18 +178,22 @@ public sealed class NeteaseService
                 new JsonObject { ["key"] = key, ["type"] = 1 });
             int code = (int?)res?["code"] ?? -1;
             string msg = (string?)res?["message"] ?? "";
-            if (code == 803)
+            switch (code)
             {
-                var raw = (string?)res?["cookie"] ?? "";
-                if (raw.Length > 0) _client.SetCookies(NeteaseClient.ParseCookieString(raw));
-                if (!await FinishLoginAsync()) return (-1, L.T("登录校验失败"));
-                return (803, L.T("登录成功"));
+                case 801: return (QrLoginState.Waiting, msg);
+                case 802: return (QrLoginState.Scanned, msg);
+                case 800: return (QrLoginState.Expired, msg);
+                case 803:
+                    var raw = (string?)res?["cookie"] ?? "";
+                    if (raw.Length > 0) _client.SetCookies(NeteaseClient.ParseCookieString(raw));
+                    if (!await FinishLoginAsync()) return (QrLoginState.Error, L.T("登录校验失败"));
+                    return (QrLoginState.Success, L.T("登录成功"));
+                default: return (QrLoginState.Error, msg);
             }
-            return (code, msg);
         }
         catch (Exception ex)
         {
-            return (-1, ex.Message);
+            return (QrLoginState.Error, ex.Message);
         }
     }
 
@@ -234,9 +242,9 @@ public sealed class NeteaseService
 
     #region 歌单 / 推荐 / 搜索
 
-    public async Task<List<NeteasePlaylist>> GetUserPlaylistsAsync()
+    public async Task<List<CloudPlaylist>> GetUserPlaylistsAsync()
     {
-        var list = new List<NeteasePlaylist>();
+        var list = new List<CloudPlaylist>();
         if (!IsLoggedIn) return list;
         var res = await _client.WeapiAsync("/weapi/user/playlist", new JsonObject
         {
@@ -246,9 +254,11 @@ public sealed class NeteaseService
         foreach (var pl in res!["playlist"]?.AsArray() ?? new JsonArray())
         {
             if (pl == null) continue;
-            list.Add(new NeteasePlaylist
+            long id = (long?)pl["id"] ?? 0;
+            if (id == 0) continue;
+            list.Add(new CloudPlaylist
             {
-                Id = (long?)pl["id"] ?? 0,
+                Id = id.ToString(),
                 Name = (string?)pl["name"] ?? L.T("未命名歌单"),
                 TrackCount = (int?)pl["trackCount"] ?? 0,
                 IsLiked = (int?)pl["specialType"] == 5
@@ -264,11 +274,12 @@ public sealed class NeteaseService
         return ParseSongs(res!["data"]?["dailySongs"]?.AsArray());
     }
 
-    public async Task<List<TrackItem>> GetPlaylistTracksAsync(long playlistId)
+    public async Task<List<TrackItem>> GetPlaylistTracksAsync(string playlistId)
     {
+        if (!long.TryParse(playlistId, System.Globalization.NumberStyles.None, null, out var plId)) return new();
         var res = await _client.WeapiAsync("/weapi/v6/playlist/detail", new JsonObject
         {
-            ["id"] = playlistId.ToString(), ["offset"] = "0", ["total"] = "true", ["limit"] = "1000"
+            ["id"] = plId.ToString(), ["offset"] = "0", ["total"] = "true", ["limit"] = "1000"
         });
         if ((int?)res?["code"] != 200) return new();
         var pl = res!["playlist"];
@@ -342,27 +353,52 @@ public sealed class NeteaseService
             var album = s["al"] ?? s["album"];
             double ms = (double?)(s["dt"] ?? s["duration"]) ?? 0;
 
-            var t = new TrackItem
-            {
-                Index = index++,
-                Id = "netease_" + id,
-                NeteaseId = id,
-                Title = (string?)s["name"] ?? L.T("未知曲目"),
-                Artist = artist.Length > 0 ? artist : "未知歌手",
-                Album = (string?)album?["name"] ?? "",
-                Duration = ms / 1000.0,
-                CoverUrl = (string?)album?["picUrl"] ?? (string?)s["picUrl"] ?? "",
-                FormatBadge = L.T("云端")
-            };
-            var cached = FindCachedAudio(id);
-            if (cached != null)
-            {
-                t.FilePath = cached;
-                t.FormatBadge = L.T("已缓存");
-            }
-            var cover = CachedCoverPath(id);
-            t.CoverPath = File.Exists(cover) ? cover : null;
+            var t = MakeTrack(index++, id, (string?)s["name"] ?? L.T("未知曲目"),
+                artist.Length > 0 ? artist : "未知歌手", (string?)album?["name"] ?? "", ms / 1000.0,
+                (string?)album?["picUrl"] ?? (string?)s["picUrl"] ?? "");
+            // 歌曲详情 / 歌单 / 推荐里是 mv，搜索结果里是 mvid；没有 MV 时是 0
+            long mv = (long?)(s["mv"] ?? s["mvid"]) ?? 0;
+            t.MvId = mv.ToString();
             tracks.Add(t);
+        }
+        return tracks;
+    }
+
+    private TrackItem MakeTrack(int index, string id, string title, string artist, string album, double duration, string coverUrl)
+    {
+        var t = new TrackItem
+        {
+            Index = index,
+            Id = "netease_" + id,   // 和早期版本保持一致：歌词偏移、自定义封面等都按这个 Id 记录
+            CloudSource = Key,
+            CloudId = id,
+            Title = title,
+            Artist = artist,
+            Album = album,
+            Duration = duration,
+            CoverUrl = coverUrl,
+            FormatBadge = L.T("云端")
+        };
+        var cached = FindCachedAudio(id);
+        if (cached != null)
+        {
+            t.FilePath = cached;
+            t.FormatBadge = L.T("已缓存");
+        }
+        var cover = CachedCoverPath(id);
+        t.CoverPath = File.Exists(cover) ? cover : null;
+        return t;
+    }
+
+    /// <summary>从快照还原云端曲目；快照里的 id 不是纯数字时跳过。</summary>
+    public List<TrackItem> FromSnapshots(IEnumerable<OnlineTrackSnapshot> list)
+    {
+        var tracks = new List<TrackItem>();
+        int index = 1;
+        foreach (var s in list)
+        {
+            if (!long.TryParse(s.CloudId, System.Globalization.NumberStyles.None, null, out var n) || n == 0) continue;
+            tracks.Add(MakeTrack(index++, s.CloudId, s.Title, s.Artist, s.Album, s.Duration, s.CoverUrl));
         }
         return tracks;
     }
@@ -409,10 +445,15 @@ public sealed class NeteaseService
                 }, ct);
                 var item = res?["data"]?.AsArray().FirstOrDefault();
                 var url = (string?)item?["url"] ?? "";
-                if ((int?)res?["code"] == 200 && url.Contains("http"))
+                // 地址只认网易云的域名；类型和音质会拼进缓存文件名，只接受白名单里的值
+                if ((int?)res?["code"] == 200 && NetGuard.IsNeteaseUrl(url)
+                    && NetGuard.NormalizeAudioType((string?)item?["type"], url) is { } type)
                 {
-                    return (url, ((string?)item?["type"] ?? "mp3").ToLowerInvariant(),
-                        (int?)item?["br"] ?? 0, (string?)item?["level"] ?? lvl);
+                    // 接口还会返回 jyeffect、sky 等不在列表里的音质名，只要求是短的小写字母 / 数字
+                    var level = (string?)item?["level"];
+                    if (level == null || level.Length is 0 or > 16 || !level.All(ch => ch is >= 'a' and <= 'z' or >= '0' and <= '9'))
+                        level = lvl;
+                    return (url, type, (int?)item?["br"] ?? 0, level);
                 }
             }
             catch (OperationCanceledException) { throw; }
@@ -430,7 +471,7 @@ public sealed class NeteaseService
 
         // 这首歌正在预缓冲：等它下完直接用，不再另开一次下载
         Task<bool>? pending;
-        lock (_prefetching) _prefetching.TryGetValue(track.NeteaseId, out pending);
+        lock (_prefetching) _prefetching.TryGetValue(track.CloudId, out pending);
         if (pending != null)
         {
             try { await pending.WaitAsync(ct); }
@@ -450,7 +491,7 @@ public sealed class NeteaseService
         string quality = PreferredQuality;
         foreach (var ext in new[] { "flac", "m4a", "mp3", "ogg" })
         {
-            var p = Path.Combine(_cacheDir, $"{track.NeteaseId}_{quality}.{ext}");
+            var p = Path.Combine(_cacheDir, $"{track.CloudId}_{quality}.{ext}");
             try { if (File.Exists(p) && new FileInfo(p).Length > 10240) return true; } catch { }
         }
         return false;
@@ -462,8 +503,8 @@ public sealed class NeteaseService
     /// </summary>
     public void Prefetch(TrackItem track)
     {
-        if (!track.IsOnline || string.IsNullOrEmpty(track.NeteaseId) || IsCached(track)) return;
-        string id = track.NeteaseId;
+        if (!track.IsOnline || string.IsNullOrEmpty(track.CloudId) || IsCached(track)) return;
+        string id = track.CloudId;
         lock (_prefetching)
         {
             if (_prefetching.ContainsKey(id)) return;
@@ -479,13 +520,15 @@ public sealed class NeteaseService
 
     private async Task<bool> ResolveCoreAsync(TrackItem track, CancellationToken ct)
     {
-        var id = track.NeteaseId;
+        var id = track.CloudId;
+        // id 会拼进缓存文件名，只接受纯数字（也可能来自保存的状态文件）
+        if (!long.TryParse(id, System.Globalization.NumberStyles.None, null, out _)) return false;
 
         // 封面先行（失败不影响播放）
         _ = CacheCoverAsync(track);
 
         string quality = PreferredQuality;
-        foreach (var ext in new[] { "flac", "m4a", "mp3", "ogg" })
+        foreach (var ext in NetGuard.AudioExtensions)
         {
             var p = Path.Combine(_cacheDir, $"{id}_{quality}.{ext}");
             if (File.Exists(p) && new FileInfo(p).Length > 10240)
@@ -516,6 +559,8 @@ public sealed class NeteaseService
             using var dl = new HttpClient { Timeout = TimeSpan.FromMinutes(5) };
             using var rsp = await dl.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct);
             if (!rsp.IsSuccessStatusCode) return false;
+            // 跟随重定向后也必须还在网易云的域名下
+            if (!NetGuard.IsNeteaseUri(rsp.RequestMessage?.RequestUri)) return false;
             long? expected = rsp.Content.Headers.ContentLength;
             long written = 0;
             await using (var src = await rsp.Content.ReadAsStreamAsync(ct))
@@ -566,13 +611,13 @@ public sealed class NeteaseService
     {
         try
         {
-            var p = CachedCoverPath(track.NeteaseId);
+            var p = CachedCoverPath(track.CloudId);
             if (File.Exists(p) && new FileInfo(p).Length > 1024)
             {
                 track.CoverPath = p;
                 return;
             }
-            if (string.IsNullOrEmpty(track.CoverUrl)) return;
+            if (!NetGuard.IsNeteaseUrl(track.CoverUrl)) return;
             var url = track.CoverUrl.Contains('?') ? track.CoverUrl : track.CoverUrl + "?param=400y400";
             var bytes = await _client.Http.GetByteArrayAsync(url);
             if (bytes.Length <= 1024) return;
@@ -588,6 +633,120 @@ public sealed class NeteaseService
     /// <summary>封面下载完成（可能在后台线程触发）。</summary>
     public event Action<TrackItem>? CoverCached;
 
+    #region MV
+
+    public bool SupportsMv => true;
+
+    public async Task EnsureMvIdAsync(TrackItem track, CancellationToken ct = default)
+    {
+        if (track.MvId.Length > 0) return;
+        if (!long.TryParse(track.CloudId, System.Globalization.NumberStyles.None, null, out var songId) || songId == 0) return;
+        try
+        {
+            var det = await _client.WeapiAsync("/weapi/v3/song/detail", new JsonObject { ["c"] = $"[{{\"id\":{songId}}}]" }, ct);
+            if ((int?)det?["code"] != 200) return;   // 查询失败时保持“不知道”，下次再查
+            long found = (long?)det?["songs"]?[0]?["mv"] ?? 0;
+            track.MvId = found.ToString();
+        }
+        catch (OperationCanceledException) { throw; }
+        catch { }
+    }
+
+    /// <summary>
+    /// 这首歌的 MV：可选画质和指定画质的播放地址（只认网易云的域名）。没有 MV 时返回 null。
+    /// 歌曲对象里没有 MV 编号时（比如从保存的队列恢复的）先查一次歌曲详情。
+    /// </summary>
+    public async Task<MvStream?> GetMvAsync(TrackItem track, int preferredHeight, CancellationToken ct = default)
+    {
+        await EnsureMvIdAsync(track, ct);
+        if (!long.TryParse(track.MvId, System.Globalization.NumberStyles.None, null, out var mvId) || mvId == 0) return null;
+
+        var info = await _client.WeapiAsync("/weapi/v1/mv/detail", new JsonObject { ["id"] = mvId }, ct);
+        var heights = (info?["data"]?["brs"]?.AsArray() ?? new JsonArray())
+            .Select(b => (int?)b?["br"] ?? 0).Where(h => h is > 0 and <= 4320).Distinct().OrderByDescending(h => h).ToList();
+        string title = (string?)info?["data"]?["name"] ?? track.Title;
+
+        // 选不超过偏好的最高画质；没有就用最低的
+        int want = heights.FirstOrDefault(h => h <= preferredHeight);
+        if (want == 0) want = heights.Count > 0 ? heights[^1] : preferredHeight;
+        var res = await _client.WeapiAsync("/weapi/song/enhance/play/mv/url", new JsonObject { ["id"] = mvId, ["r"] = want }, ct);
+        string? url = (string?)res?["data"]?["url"];
+        if ((int?)res?["code"] != 200 || !NetGuard.IsNeteaseUrl(url)) return null;
+        int actual = (int?)res?["data"]?["r"] ?? want;
+        // 未登录等情况下接口只给低画质：列表里只保留实际拿得到的及以下
+        if (heights.Count == 0) heights.Add(actual);
+        return new MvStream(url!, actual, heights, title);
+    }
+
+    #endregion
+
+    #region 动态封面
+
+    private const long MaxDynamicCoverBytes = 40L * 1024 * 1024;
+    // 本次运行中确认过没有动态封面的歌曲，不再重复请求
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, byte> _noDynamicCover = new();
+
+    /// <summary>网易云的动态封面（需要登录）：取到视频地址后下载到缓存，返回本地 mp4 路径。</summary>
+    public async Task<string?> GetDynamicCoverAsync(string cloudId, CancellationToken ct = default)
+    {
+        if (!long.TryParse(cloudId, System.Globalization.NumberStyles.None, null, out var songId) || songId == 0) return null;
+        var path = Path.Combine(_cacheDir, $"{cloudId}_dyncover.mp4");
+        try
+        {
+            if (File.Exists(path) && new FileInfo(path).Length > 10240) { Touch(path); return path; }
+        }
+        catch { }
+        if (!IsLoggedIn || _noDynamicCover.ContainsKey(cloudId)) return null;
+
+        string? url;
+        try
+        {
+            var res = await _client.WeapiAsync("/weapi/songplay/dynamic-cover", new JsonObject { ["songId"] = songId }, ct);
+            if ((int?)res?["code"] != 200) return null;   // 接口出错时不记为“没有”，下次再试
+            url = (string?)res?["data"]?["videoPlayUrl"];
+            if (!NetGuard.IsNeteaseUrl(url)) { _noDynamicCover[cloudId] = 0; return null; }
+        }
+        catch (OperationCanceledException) { throw; }
+        catch { return null; }
+
+        var tmp = path + "." + Guid.NewGuid().ToString("N")[..8] + ".tmp";
+        try
+        {
+            using var req = new HttpRequestMessage(HttpMethod.Get, url);
+            req.Headers.TryAddWithoutValidation("Referer", "https://music.163.com/");
+            using var dl = new HttpClient { Timeout = TimeSpan.FromMinutes(2) };
+            using var rsp = await dl.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct);
+            if (!rsp.IsSuccessStatusCode || !NetGuard.IsNeteaseUri(rsp.RequestMessage?.RequestUri)) return null;
+            long? expected = rsp.Content.Headers.ContentLength;
+            if (expected > MaxDynamicCoverBytes) return null;
+            long written = 0;
+            await using (var src = await rsp.Content.ReadAsStreamAsync(ct))
+            await using (var dst = new FileStream(tmp, FileMode.Create, FileAccess.Write, FileShare.None))
+            {
+                var buf = new byte[64 * 1024];
+                int n;
+                while ((n = await src.ReadAsync(buf, ct)) > 0)
+                {
+                    written += n;
+                    if (written > MaxDynamicCoverBytes) return null;
+                    await dst.WriteAsync(buf.AsMemory(0, n), ct);
+                }
+            }
+            if (written <= 10240 || (expected.HasValue && written != expected.Value)) return null;
+            File.Move(tmp, path, true);
+            EnforceCacheQuota();
+            return path;
+        }
+        catch (OperationCanceledException) { throw; }
+        catch { return null; }
+        finally
+        {
+            try { if (File.Exists(tmp)) File.Delete(tmp); } catch { }
+        }
+    }
+
+    #endregion
+
     private static void Touch(string path)
     {
         try { File.SetLastWriteTimeUtc(path, DateTime.UtcNow); } catch { }
@@ -598,7 +757,7 @@ public sealed class NeteaseService
         try
         {
             var files = new DirectoryInfo(_cacheDir).EnumerateFiles().ToList();
-            return (files.Count(f => f.Extension != ".jpg"), files.Sum(f => f.Length));
+            return (files.Count(f => f.Extension is not (".jpg" or ".mp4")), files.Sum(f => f.Length));   // 数量只算音频
         }
         catch
         {
@@ -628,7 +787,7 @@ public sealed class NeteaseService
         {
             long limit = Math.Max(256, State.NeteaseCacheLimitMb) * 1024L * 1024L;
             var audio = new DirectoryInfo(_cacheDir).EnumerateFiles()
-                .Where(f => f.Extension is ".flac" or ".m4a" or ".mp3" or ".ogg")
+                .Where(f => f.Extension is ".flac" or ".m4a" or ".mp3" or ".ogg" or ".mp4")   // mp4 = 动态封面
                 .OrderBy(f => f.LastWriteTimeUtc).ToList();
             long total = audio.Sum(f => f.Length);
             foreach (var f in audio)
@@ -643,9 +802,6 @@ public sealed class NeteaseService
     #endregion
 
     #region 歌词
-
-    /// <summary>歌词包：Lrc 在有逐字歌词时已是增强 LRC（&lt;时间&gt;逐字标记）。</summary>
-    public record LyricBundle(string Lrc, string Trans, string Roma);
 
     private static string Ts(double ms)
     {
@@ -681,13 +837,13 @@ public sealed class NeteaseService
     }
 
     /// <summary>取歌词：优先逐字歌词，同时返回翻译与罗马音。</summary>
-    public async Task<LyricBundle> GetLyricsAsync(string songId, CancellationToken ct = default)
+    public async Task<LyricBundle> GetLyricsAsync(string cloudId, CancellationToken ct = default)
     {
         try
         {
             var res = await _client.WeapiAsync("/weapi/song/lyric/v1", new JsonObject
             {
-                ["id"] = songId, ["cp"] = false, ["tv"] = 0, ["lv"] = 0, ["rv"] = 0,
+                ["id"] = cloudId, ["cp"] = false, ["tv"] = 0, ["lv"] = 0, ["rv"] = 0,
                 ["kv"] = 0, ["yv"] = 0, ["ytv"] = 0, ["yrv"] = 0
             }, ct);
             if ((int?)res?["code"] == 200)
@@ -704,7 +860,7 @@ public sealed class NeteaseService
         }
         catch (OperationCanceledException) { throw; }
         catch { }
-        return new LyricBundle("", "", "");
+        return LyricBundle.Empty;
     }
 
     #endregion

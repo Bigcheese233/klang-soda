@@ -55,7 +55,7 @@
                         <Image
                             ImageOpened="TrackThumb_ImageOpened"
                             Source="{x:Bind CoverThumb, Mode=OneWay}"
-                            Stretch="UniformToFill" />
+                            Stretch="UniformToFill" HorizontalAlignment="Center" VerticalAlignment="Center" />
                         <!-- 正在播放的行：随音乐跳动的小频谱 -->
                         <local:NowPlayingBars Visibility="{x:Bind IsCurrent, Mode=OneWay}" />
                         <!-- 悬停时的播放图标（必须是最后一个子元素，代码按位置取它） -->
@@ -166,8 +166,90 @@
                 QuerySubmitted="SearchBox_QuerySubmitted"
                 TextChanged="SearchBox_TextChanged" />
 
+            <!-- 3b. 多选时替换工具栏的操作条 -->
+            <Grid
+                x:Name="SelectionBar"
+                Grid.Row="2"
+                Margin="2,0,2,0"
+                ColumnSpacing="2"
+                Visibility="Collapsed">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBlock
+                    x:Name="SelectionCountText"
+                    VerticalAlignment="Center"
+                    FontSize="12"
+                    FontWeight="SemiBold"
+                    Text="已选 0 首"
+                    TextTrimming="CharacterEllipsis" />
+                <Button
+                    Grid.Column="1"
+                    Height="28"
+                    Padding="8,0,8,0"
+                    AutomationProperties.Name="全选"
+                    Click="SelectAllBtn_Click"
+                    CornerRadius="4"
+                    Style="{StaticResource SubtleButtonStyle}"
+                    ToolTipService.ToolTip="全选 (Ctrl+A)">
+                    <FontIcon FontSize="13" Glyph="&#xE8B3;" />
+                </Button>
+                <Button
+                    x:Name="SelAddToPlaylistBtn"
+                    Grid.Column="2"
+                    Height="28"
+                    Padding="8,0,8,0"
+                    AutomationProperties.Name="添加到歌单"
+                    Click="SelAddToPlaylistBtn_Click"
+                    CornerRadius="4"
+                    Style="{StaticResource SubtleButtonStyle}"
+                    ToolTipService.ToolTip="添加到歌单">
+                    <FontIcon FontSize="13" Glyph="&#xE8F4;" />
+                </Button>
+                <Button
+                    x:Name="SelAddToQueueBtn"
+                    Grid.Column="3"
+                    Height="28"
+                    Padding="8,0,8,0"
+                    AutomationProperties.Name="加入播放队列"
+                    Click="SelAddToQueueBtn_Click"
+                    CornerRadius="4"
+                    Style="{StaticResource SubtleButtonStyle}"
+                    ToolTipService.ToolTip="加入播放队列">
+                    <FontIcon FontSize="13" Glyph="&#xE902;" />
+                </Button>
+                <Button
+                    x:Name="SelRemoveBtn"
+                    Grid.Column="4"
+                    Height="28"
+                    Padding="8,0,8,0"
+                    AutomationProperties.Name="从曲库移除"
+                    Click="SelRemoveBtn_Click"
+                    CornerRadius="4"
+                    Style="{StaticResource SubtleButtonStyle}"
+                    ToolTipService.ToolTip="从曲库移除 (Delete)">
+                    <FontIcon FontSize="13" Glyph="&#xE74D;" />
+                </Button>
+                <Button
+                    Grid.Column="5"
+                    Height="28"
+                    Padding="8,0,8,0"
+                    AutomationProperties.Name="完成"
+                    Click="SelDoneBtn_Click"
+                    CornerRadius="4"
+                    Style="{StaticResource SubtleButtonStyle}"
+                    ToolTipService.ToolTip="退出多选 (Esc)">
+                    <FontIcon FontSize="13" Glyph="&#xE711;" />
+                </Button>
+            </Grid>
+
             <!-- 3. 辅助工具栏 (数量统计 + 添加 + 排序) -->
-            <Grid Grid.Row="2" Margin="2,0,2,0">
+            <Grid x:Name="ToolbarGrid" Grid.Row="2" Margin="2,0,2,0">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="*" />
@@ -316,6 +398,8 @@
                         IsItemClickEnabled="True"
                         ItemClick="TracksListView_ItemClick"
                         ItemTemplateSelector="{StaticResource TrackListSelector}"
+                        KeyDown="TracksListView_KeyDown"
+                        SelectionChanged="TracksListView_SelectionChanged"
                         SelectionMode="Single" />
 
                     <!-- 歌单列表 -->
@@ -417,7 +501,7 @@
                                                 FontSize="32"
                                                 Foreground="{ThemeResource TextFillColorTertiaryBrush}"
                                                 Glyph="&#xE93C;" />
-                                            <Image Source="{x:Bind Cover}" Stretch="UniformToFill" />
+                                            <Image Source="{x:Bind Cover}" Stretch="UniformToFill" HorizontalAlignment="Center" VerticalAlignment="Center" />
                                         </Grid>
                                     </Border>
                                     <TextBlock

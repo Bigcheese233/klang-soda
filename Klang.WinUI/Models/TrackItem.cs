@@ -45,15 +45,26 @@ public class TrackItem : System.ComponentModel.INotifyPropertyChanged
     public string DurationStr => FormatDuration(Duration);
     public string FilePath { get; set; } = string.Empty;
     private string? _coverPath;
+    /// <summary>显示用的封面：用户调整过就用自定义封面，否则用原始封面。</summary>
     public string? CoverPath
     {
-        get => _coverPath;
+        get => Klang_WinUI.Services.CustomCoverService.Lookup(Id) ?? _coverPath;
         set
         {
             _coverPath = value;
             Raise(nameof(CoverPath));
             Raise(nameof(CoverThumb));
         }
+    }
+
+    /// <summary>原始封面（从文件提取 / 在线补全 / 云端缓存），不受自定义封面影响；保存曲库时存的是它。</summary>
+    public string? OriginalCoverPath => _coverPath;
+
+    /// <summary>自定义封面变了：通知界面重新取封面。</summary>
+    public void NotifyCoverChanged()
+    {
+        Raise(nameof(CoverPath));
+        Raise(nameof(CoverThumb));
     }
 
     /// <summary>列表里的封面缩略图（本地文件，或云端曲目尚未缓存时用网络小图）；没有封面时为 null。</summary>
@@ -64,9 +75,10 @@ public class TrackItem : System.ComponentModel.INotifyPropertyChanged
             try
             {
                 Uri? uri = null;
-                if (!string.IsNullOrEmpty(_coverPath) && File.Exists(_coverPath)) uri = new Uri(_coverPath);
-                else if (!string.IsNullOrEmpty(CoverUrl))
-                    uri = new Uri(NeteaseId.Length > 0 && !CoverUrl.Contains('?') ? CoverUrl + "?param=96y96" : CoverUrl);
+                var cover = CoverPath;
+                if (!string.IsNullOrEmpty(cover) && File.Exists(cover)) uri = new Uri(cover);
+                else if (Klang_WinUI.Services.Cloud.CloudSources.For(this)?.IsTrustedUrl(CoverUrl) == true)
+                    uri = new Uri(SodaId.Length > 0 || CoverUrl.Contains('?') ? CoverUrl : CoverUrl + "?param=96y96");
                 return uri == null ? null : new Microsoft.UI.Xaml.Media.Imaging.BitmapImage(uri) { DecodePixelWidth = 96 };
             }
             catch
@@ -189,12 +201,26 @@ public class TrackItem : System.ComponentModel.INotifyPropertyChanged
     /// <summary>在线补全时匹配到的网易云歌曲 ID（用于取歌词）。</summary>
     public string MetaNeteaseId { get; set; } = string.Empty;
 
-    /// <summary>网易云歌曲 ID；非空表示云端曲目（FilePath 在解析音源后才有值）。</summary>
-    public string NeteaseId { get; set; } = string.Empty;
-    /// <summary>汽水曲目独立于网易云，缓存文件不能改变曲目的平台身份。</summary>
-    public string SodaId { get; set; } = string.Empty;
+    /// <summary>云端来源的标识（见 Services.Cloud.CloudSources）；空字符串按网易云处理。</summary>
+    public string CloudSource { get; set; } = string.Empty;
+    /// <summary>曲目在云端平台上的 ID；非空表示云端曲目（FilePath 在解析音源后才有值）。</summary>
+    public string CloudId { get; set; } = string.Empty;
+    /// <summary>汽水侧栏使用的兼容属性；平台身份统一存入 CloudSource / CloudId。</summary>
+    public string SodaId
+    {
+        get => CloudSource == "soda" ? CloudId : string.Empty;
+        set
+        {
+            if (!string.IsNullOrEmpty(value)) { CloudSource = "soda"; CloudId = value; }
+            else if (CloudSource == "soda") CloudId = string.Empty;
+        }
+    }
     public string CoverUrl { get; set; } = string.Empty;
-    public bool IsOnline => NeteaseId.Length > 0 || SodaId.Length > 0;
+    public bool IsOnline => CloudId.Length > 0;
+
+    /// <summary>云端平台上这首歌的 MV 编号：空 = 不知道（比如从保存的队列恢复的），"0" = 确认没有 MV。</summary>
+    public string MvId { get; set; } = string.Empty;
+    public bool HasMv => MvId.Length > 0 && MvId != "0";
 
     /// <summary>ReplayGain 标签（dB / 峰值），没有标签时为 null。</summary>
     public double? ReplayGainDb { get; set; }

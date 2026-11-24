@@ -455,6 +455,23 @@ public sealed partial class VinylCoverCard : UserControl
         }
     }
 
+    /// <summary>彩蛋：封面上边缘的小人是否出现。</summary>
+    public void SetEasterEggVisible(bool visible) => EggSitter.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
+
+    /// <summary>彩蛋小人跟着音乐：是否在播放、当前歌曲的 BPM（0 = 不知道）。</summary>
+    public void UpdateEasterEgg(bool playing, double bpm) => EggSitter.SetPlaying(playing, bpm);
+
+    /// <summary>点了封面右上角的 MV 按钮。</summary>
+    public event EventHandler? MvRequested;
+
+    /// <summary>当前歌曲是否有 MV（决定是否显示 MV 按钮）。</summary>
+    public void SetMvAvailable(bool available) => MvButton.Visibility = available ? Visibility.Visible : Visibility.Collapsed;
+
+    private void MvButton_Click(object sender, RoutedEventArgs e) => MvRequested?.Invoke(this, EventArgs.Empty);
+
+    /// <summary>动态封面：本地视频路径（没有时为 null）和音乐是否在播放。</summary>
+    public void SetDynamicCover(string? path, bool playing) => DynamicCover.Set(path, playing);
+
     /// <summary>封面所在的元素：列表缩略图 / 沉浸模式的封面和它之间做连贯转场。</summary>
     public UIElement CoverTarget => JacketCard;
 

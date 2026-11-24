@@ -19,7 +19,7 @@
 
 - `Controls/SodaPanel.xaml(.cs)`：左侧账号、推荐、收藏和八个模式入口，侧栏内展开列表；右侧保留上游封面、频谱和歌词舞台。
 - `MainWindow.Soda.cs`：把模式选择与曲目选择接到主播放器，取消旧选择、准备音源并同步舞台。
-- `Services/OnlineMusicService.cs`：区分网易云和汽水的音源/歌词获取路径。
+- `Services/Cloud/CloudSources.cs` 和 `Services/Soda/SodaCloudSource.cs`：统一路由网易云、QQ 音乐和汽水的音源、歌词、预缓冲与队列快照；汽水保留独立侧栏及 WebView2 登录。
 - `Services/SodaFeedQueue.cs`：保存当前模式、按汽水曲目 ID 去重、接近队尾继续取批次；切换模式后丢弃旧任务结果。
 - `Models/TrackItem.cs`：标识在线来源和汽水曲目，不把不同来源的 ID 混在一起。
 

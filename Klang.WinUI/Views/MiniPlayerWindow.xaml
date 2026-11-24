@@ -40,7 +40,7 @@
                     <Border CornerRadius="8">
                         <Image
                             x:Name="MiniCoverImage"
-                            Stretch="UniformToFill"
+                            Stretch="UniformToFill" HorizontalAlignment="Center" VerticalAlignment="Center"
                             Visibility="Collapsed" />
                     </Border>
                 </Grid>

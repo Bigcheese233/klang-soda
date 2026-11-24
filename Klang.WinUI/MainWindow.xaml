@@ -90,13 +90,17 @@
                         <FontIcon FontSize="12" Glyph="&#xE70D;" />
                     </StackPanel>
                     <Button.Flyout>
-                        <MenuFlyout>
+                        <MenuFlyout Opening="LyricMenu_Opening">
                             <MenuFlyoutSubItem Text="副行显示">
                                 <RadioMenuFlyoutItem x:Name="SubTransItem" Click="SubModeItem_Click" GroupName="SubMode" Tag="trans" Text="翻译" />
                                 <RadioMenuFlyoutItem x:Name="SubRomaItem" Click="SubModeItem_Click" GroupName="SubMode" Tag="roma" Text="罗马音" />
                                 <RadioMenuFlyoutItem x:Name="SubBothItem" Click="SubModeItem_Click" GroupName="SubMode" Tag="both" Text="翻译 + 罗马音" />
                                 <RadioMenuFlyoutItem x:Name="SubOffItem" Click="SubModeItem_Click" GroupName="SubMode" Tag="off" Text="关" />
                             </MenuFlyoutSubItem>
+                            <ToggleMenuFlyoutItem
+                                x:Name="SwapPairsItem"
+                                Click="SwapPairsItem_Click"
+                                Text="原文与翻译对调" />
                             <ToggleMenuFlyoutItem
                                 x:Name="DesktopLyricItem"
                                 Click="DesktopLyricBtn_Click"
@@ -267,7 +271,7 @@
                                     FontSize="22"
                                     Foreground="{ThemeResource TextFillColorTertiaryBrush}"
                                     Glyph="&#xE8D6;" />
-                                <Image x:Name="NarrowCover" Stretch="UniformToFill" />
+                                <Image x:Name="NarrowCover" Stretch="UniformToFill" HorizontalAlignment="Center" VerticalAlignment="Center" />
                             </Grid>
                         </Border>
                         <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
@@ -309,5 +313,10 @@
             x:Name="ImmersiveLayer"
             Grid.RowSpan="3"
             Visibility="Collapsed" />
+
+        <!-- MV 播放层（覆盖整个窗口） -->
+        <controls:MvPlayerView
+            x:Name="MvLayer"
+            Grid.RowSpan="3" />
     </Grid>
 </Window>

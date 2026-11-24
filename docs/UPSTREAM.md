@@ -3,12 +3,19 @@
 ## 当前基础
 
 - 原项目与作者：[gwj0323/klang](https://github.com/gwj0323/klang)。
-- 已同步上游版本：**2.7.6**。
-- 上游提交：[`389b66a8ab20bceb7c598df67fb2f7ae32fae747`](https://github.com/gwj0323/klang/commit/389b66a8ab20bceb7c598df67fb2f7ae32fae747)。
-- 本项目候选版本：**2.7.6.1**。第四段用于独立维护修订，不改变上游版本的含义。
+- 已同步上游版本：**2.8.0**。
+- 上游提交：[`e39735cfd79e12c31fc14d938efe71e990b08078`](https://github.com/gwj0323/klang/commit/e39735cfd79e12c31fc14d938efe71e990b08078)。
+- 本项目候选版本：**2.8.0.1**。第四段用于独立维护修订，不改变上游版本的含义。
 - 原始上游说明保留为 [UPSTREAM_README.md](UPSTREAM_README.md)，原始 LICENSE 与 Git 历史保留。
 
 本轮保留了上游新增/修复的播放队列、歌词候选选择、独立音频分析子进程、曲库与歌词处理，以及 WindowHelpers 的拖动和跨屏 DPI 处理、CrashReporter 的事件日志编码修复。
+
+## 2.8.0.1 同步（2026-11-24）
+
+- 上游已合并纯任务栏 PR #19，继续采用其轮询降频、停靠与窗口稳定性修复，不覆盖回旧实现。
+- 同步 2.7.7 至 2.8.0 的 QQ 音乐、网易云 MV/动态封面、自定义封面、多选、托盘、双语歌词与网络边界修复。
+- 汽水通过 SodaCloudSource 接入 ICloudSource，统一 CloudSource / CloudId 与快照恢复，保留独立侧栏；不出现在通用云端登录选择框。
+- 沿用 Klang Soda 的应用标识、资料目录、安装 AppId、Node 打包与独立更新地址；安装/卸载只检测 Klang.Soda.exe。
 
 ## 独立功能的来源
 
@@ -23,7 +30,7 @@
 | 项目标识 | AppIdentity、Klang.Soda.exe、四段版本号、独立应用标识 |
 | 安装与数据 | 独立 AppId、Klang Soda 安装目录、KlangSoda 资料目录和所有缓存目录 |
 | 更新渠道 | UpdateService、关于页、安装脚本只指向 Bigcheese233/klang-soda |
-| 播放与界面 | 汽水侧栏、MainWindow.Soda.cs、OnlineMusicService、SodaFeedQueue、Soda 服务和登录资源 |
+| 播放与界面 | 汽水侧栏、MainWindow.Soda.cs、SodaCloudSource、SodaFeedQueue、Soda 服务和登录资源 |
 | 任务栏 | 原生 COM 查询、透明窗口、停靠布局及设置入口 |
 | 打包 | PreparePublish.ps1、随包 Node、相应许可证与完整源码归档 |
 | 说明 | README、PRIVACY、RELEASE_NOTES、第三方归属与本目录 |

@@ -1,16 +1,16 @@
 <div align="center">
   <img src="Klang.WinUI/Assets/AppLogo.png" width="96" height="96" alt="Klang Soda" />
   <h1>Klang Soda</h1>
-  <p>本地音乐、网易云、汽水音乐，一个窗口听歌。</p>
+  <p>本地音乐、网易云、QQ 音乐、汽水音乐，一个窗口听歌。</p>
   <p>Windows 桌面音乐播放器 · 同步歌词 · 任务栏播放条</p>
 
   [![License](https://img.shields.io/badge/license-GPL--3.0-green)](LICENSE)
   ![Platform](https://img.shields.io/badge/Windows-10%20%2F%2011%20x64-blue)
 </div>
 
-Klang Soda 将本地曲库、网易云和汽水音乐放在同一个桌面播放器里。你可以在主窗口浏览音乐、看封面和歌词，也可以把播放控制留在任务栏，工作时随手暂停、切歌。
+Klang Soda 将本地曲库、网易云、QQ 音乐和汽水音乐放在同一个桌面播放器里。你可以在主窗口浏览音乐、看封面和歌词，也可以把播放控制留在任务栏，工作时随手暂停、切歌。
 
-项目由 **Bigcheese233** 维护，主版本使用 WinUI 3。当前开发候选版本为 **2.7.6.1**，尚未发布正式安装包。版本变化和验证情况见 [版本记录](RELEASE_NOTES.md)。
+项目由 **Bigcheese233** 维护，主版本使用 WinUI 3。当前开发候选版本为 **2.8.0.1**，尚未发布正式安装包。版本变化和验证情况见 [版本记录](RELEASE_NOTES.md)。
 
 ## 功能一览
 
@@ -18,10 +18,14 @@ Klang Soda 将本地曲库、网易云和汽水音乐放在同一个桌面播放
 | --- | --- |
 | 本地曲库 | 添加音乐文件夹，按歌曲、专辑、喜欢和歌单浏览，查看标签与封面 |
 | 网易云音乐 | 登录账号，使用每日推荐和我喜欢的音乐，与本地音乐共用播放器 |
+| QQ 音乐 | 通过 QQ / 微信扫码登录，浏览歌单、雷达推荐与在线搜索 |
+| 网易云 MV 与动态封面 | 支持曲目 MV、画质与全屏控制，以及可选的静音动态封面 |
 | 汽水音乐 | 扫码登录，收听推荐、我喜欢的音乐和八个模式 |
 | 任务栏播放条 | 在任务栏空白区域显示封面、曲目信息、歌词及播放控制，支持左右停靠和紧凑布局 |
 | 歌词与界面 | 同步歌词、桌面歌词、迷你播放器、封面与频谱显示 |
 | 音频设置 | 均衡器、音效、耳机校准、播放倍速与独占输出 |
+
+本版同步 Klang 2.8.0，包含双语歌词原文/译文交换、歌词帧率设置、曲库多选、自定义封面、托盘及任务栏稳定性改进。同步记录见 [上游说明](docs/UPSTREAM.md)。
 
 ## 汽水音乐
 
@@ -62,7 +66,7 @@ Klang Soda 将本地曲库、网易云和汽水音乐放在同一个桌面播放
 首次使用：
 
 1. **听本地音乐**：在曲库中选择“添加”，导入音乐文件夹。
-2. **使用网易云**：切换到“云端”，按界面提示登录账号。
+2. **使用网易云或 QQ 音乐**：切换到“云端”，选择来源，再按界面提示登录账号。
 3. **使用汽水**：切换到“汽水音乐”，点击登录，用手机汽水音乐 App 的“搜索 → 扫一扫”扫描二维码并确认；出现额外验证时在登录窗口内完成。
 4. **开启任务栏播放条**：通过“视图”菜单开启，或按 `Ctrl+B`。
 
@@ -70,7 +74,7 @@ Klang Soda 将本地曲库、网易云和汽水音乐放在同一个桌面播放
 
 ## 账号与资料
 
-程序默认将曲库状态、歌词、封面、波形、网易云缓存和汽水资料存放在：
+程序默认将曲库状态、歌词、封面、波形、网易云/QQ 音乐缓存和汽水资料存放在：
 
 ```text
 %LocalAppData%\KlangSoda
@@ -78,7 +82,7 @@ Klang Soda 将本地曲库、网易云和汽水音乐放在同一个桌面播放
 
 汽水登录会话由当前 Windows 用户的 DPAPI 加密保存，缓存目录中的其他文件并非全部加密。退出账号不会自动清空所有缓存，具体保存内容与网络请求见 [隐私说明](PRIVACY.md)。
 
-Klang Soda 使用独立的安装标识和资料目录，不自动迁移旧 Klang 的曲库或账号。更新检查只读取本项目的发布列表。
+Klang Soda 使用独立的安装标识和资料目录，不自动迁移旧 Klang 的曲库或账号。更新检查只读取本项目的发布列表。启动时检查更新可在“设置 → 关于”关闭，不会自动下载或安装。
 
 ## 从源码运行
 
@@ -101,12 +105,12 @@ dotnet run --project Klang.WinUI/Klang.WinUI.csproj -c Debug -p:Platform=x64
 dotnet publish Klang.WinUI/Klang.WinUI.csproj -c Release -r win-x64 -p:Platform=x64 --self-contained true -o publish/KlangSoda
 ./installer/PreparePublish.ps1 -PublishDirectory ./publish/KlangSoda
 # 需要 Inno Setup；SourceDir 相对 installer/Klang.iss 所在目录解析。
-ISCC.exe /DAppVersion=2.7.6.1 /DSourceDir=..\publish\KlangSoda installer/Klang.iss
+ISCC.exe /DAppVersion=2.8.0.1 /DSourceDir=..\publish\KlangSoda installer/Klang.iss
 ```
 
 发布准备脚本会校验并附带 Node、许可证、说明及匹配的完整源码 ZIP，要求工作区干净且已提交。仅做本地构建检查时可传 `-SkipSourceArchive`，该模式不生成供正式分发使用的匹配源码归档。
 
-GitHub Actions 的 **Build Klang Soda** 工作流手动触发，默认构建 WinUI 版本，产物保存在 Actions artifacts，不自动发布 Release。正式 WinUI Release 标签需包含 `winui` 和版本号，例如 `winui-v2.7.6.1`，供程序检查更新时识别。
+GitHub Actions 的 **Build Klang Soda** 工作流手动触发，默认构建 WinUI 版本，产物保存在 Actions artifacts，不自动发布 Release。正式 WinUI Release 标签需包含 `winui` 和版本号，例如 `winui-v2.8.0.1`，供程序检查更新时识别。
 
 仓库中的 Qt/Python 目录保留历史源码，目前不包含 WinUI 版本的汽水接入功能；可选的旧版 Qt 构建默认关闭。
 

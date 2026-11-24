@@ -63,7 +63,7 @@ public sealed class FluidBackground : UserControl
     private TimeSpan _gLast;
 
     // ---- 氛围（时段 / 天气）：每帧向目标值平滑靠近，时段或天气变化时约 4 秒过渡 ----
-    private float _aWarm, _aBright = 1f, _aSpeed = 1f, _aSat = 1f, _aRain, _aSnow, _aOver;
+    private float _aWarm, _aBright = 1f, _aSpeed = 1f, _aSat = 1f, _aRain, _aSnow, _aOver, _aThunder, _aFog;
     private float _flowTime, _clockTime;
     private bool _ambInit;
 
@@ -73,8 +73,8 @@ public sealed class FluidBackground : UserControl
         if (!_ambInit)
         {
             _ambInit = true;
-            (_aWarm, _aBright, _aSpeed, _aSat, _aRain, _aSnow, _aOver) =
-                (a.Warmth, a.Brightness, a.Speed, a.Saturation, a.Rain, a.Snow, a.Overcast);
+            (_aWarm, _aBright, _aSpeed, _aSat, _aRain, _aSnow, _aOver, _aThunder, _aFog) =
+                (a.Warmth, a.Brightness, a.Speed, a.Saturation, a.Rain, a.Snow, a.Overcast, a.Thunder, a.Fog);
         }
         else
         {
@@ -86,9 +86,68 @@ public sealed class FluidBackground : UserControl
             _aRain += (a.Rain - _aRain) * k;
             _aSnow += (a.Snow - _aSnow) * k;
             _aOver += (a.Overcast - _aOver) * k;
+            _aThunder += (a.Thunder - _aThunder) * k;
+            _aFog += (a.Fog - _aFog) * k;
         }
         _flowTime += dt * _aSpeed;   // 流动速度随时段变化：时间按倍数推进，画面不会跳
         _clockTime = (_clockTime + dt) % 1200f;   // 只用于雨雪的运动；回绕避免着色器里的浮点精度随运行时间下降
+        StepLightning(dt);
+    }
+
+    // ---- 闪电：每隔一段随机时间来一次，每次 1~3 下闪光（间隔不小于 0.12 秒，一秒内最多 3 下），
+    //      亮度有上限；系统关闭了“动画效果”时不闪 ----
+    private readonly Random _rng = new();
+    private readonly float[] _pulseAt = new float[3], _pulseAmp = new float[3];
+    private int _pulseN;
+    private float _strikeIn = 3f, _strikeT = -1f, _flash, _flashX;
+    private readonly Windows.UI.ViewManagement.UISettings? _uiSettings = TryUiSettings();
+
+    private static Windows.UI.ViewManagement.UISettings? TryUiSettings()
+    {
+        try { return new Windows.UI.ViewManagement.UISettings(); } catch { return null; }
+    }
+
+    private bool AnimationsEnabled
+    {
+        get { try { return _uiSettings?.AnimationsEnabled ?? true; } catch { return true; } }
+    }
+
+    private void StepLightning(float dt)
+    {
+        float flash = 0f;
+        if (_strikeT >= 0f)
+        {
+            _strikeT += dt;
+            for (int i = 0; i < _pulseN; i++)
+            {
+                float s = _strikeT - _pulseAt[i];
+                if (s < 0f) continue;
+                float decay = i == _pulseN - 1 ? 0.35f : 0.10f;   // 最后一下余辉长一些
+                flash += _pulseAmp[i] * (s < 0.03f ? s / 0.03f : MathF.Exp(-(s - 0.03f) / decay));
+            }
+            if (_strikeT > _pulseAt[_pulseN - 1] + 2.5f) _strikeT = -1f;
+        }
+        _flash = MathF.Min(flash, 1f) * MathF.Min(1f, _aThunder * 1.5f);
+
+        if (_aThunder < 0.05f) { _strikeIn = MathF.Max(_strikeIn, 2f); return; }
+        _strikeIn -= dt;
+        if (_strikeIn > 0f || _strikeT >= 0f) return;
+
+        // 下一次：雷暴越强越频繁，平均约 20 秒（弱）到 9 秒（强）
+        float mean = 20f + (9f - 20f) * _aThunder;
+        _strikeIn = MathF.Max(5f, mean * (0.5f + (float)_rng.NextDouble()));
+        if (!AnimationsEnabled) return;
+
+        _pulseN = 1 + _rng.Next(3);
+        float t0 = 0f;
+        for (int i = 0; i < _pulseN; i++)
+        {
+            _pulseAt[i] = t0;
+            _pulseAmp[i] = (0.55f + 0.45f * (float)_rng.NextDouble()) * (i == 0 ? 1f : 0.75f);
+            t0 += 0.12f + 0.15f * (float)_rng.NextDouble();
+        }
+        _flashX = (float)(_rng.NextDouble() * 1.4 - 0.7) * MathF.Max(1f, _aspect * 0.6f);
+        _strikeT = 0f;
     }
 
     // ---- 雨水（只在 GPU 路径使用）：CPU 跑水珠物理，GPU 画雾珠层和水面 ----
@@ -208,7 +267,8 @@ public sealed class FluidBackground : UserControl
         return new FluidShader(
             _flowTime, _energy, mixv, has, prev, cur,
             F3(DefaultPalette[0]), F3(DefaultPalette[1]), F3(DefaultPalette[2]), F3(DefaultPalette[3]), F3(BaseColor),
-            _clockTime, new float4(_aWarm, _aBright, _aSat, 0f), new float4(_rainActive ? MathF.Max(_aRain, 0.006f) : 0f, _aSnow, _aOver, 0f),
+            _clockTime, new float4(_aWarm, _aBright, _aSat, 0f), new float4(_rainActive ? MathF.Max(_aRain, 0.006f) : 0f, _aSnow, _aOver, _aFog < 0.002f ? 0f : _aFog),
+            new float4(_flash, _flashX, _aThunder, 0f),
             _gDrizzle!, _gRects!, _gDepth!, _gTiles!, _rain.TilesX, _gDropAlpha!, _gDropColor!);
     }
 
@@ -731,6 +791,7 @@ public sealed class FluidBackground : UserControl
         }
 
         float warpAmp = 0.16f + e * 0.10f;
+        float fogK = _aFog < 0.002f ? 0f : _aFog, flash = _flash * 0.6f;   // 低分辨率路径上闪光是整屏均匀的，弱一点
         var buf = _buffer;
 
         Parallel.For(0, H, y =>
@@ -786,12 +847,26 @@ public sealed class FluidBackground : UserControl
                 float boost = 1f + e * 0.08f;
                 r *= boost; g *= boost; b *= boost;
 
-                // 氛围（CPU 路径分辨率太低，不画雨雪，只做色调和阴天）
+                // 氛围（CPU 路径分辨率太低，不画雨雪，只做色调、阴天、均匀的雾和闪光）
                 float sat = _aSat * (1f - _aOver * 0.55f);
                 float l2 = r * 0.299f + g * 0.587f + b * 0.114f;
                 r = MathF.Max(l2 + (r - l2) * sat, 0f); g = MathF.Max(l2 + (g - l2) * sat, 0f); b = MathF.Max(l2 + (b - l2) * sat, 0f);
-                float bri = _aBright * (1f - _aOver * 0.08f);
+                float bri = _aBright * (1f - _aOver * 0.08f) * (1f - _aThunder * 0.10f);
                 r *= (1f + 0.20f * _aWarm) * bri; g *= (1f + 0.04f * _aWarm) * bri; b *= (1f - 0.22f * _aWarm) * bri;
+                if (fogK > 0f)
+                {
+                    float lf = r * 0.299f + g * 0.587f + b * 0.114f;
+                    float dens = fogK * (0.45f + 0.22f * (1f - uvy));
+                    r += (lf * 0.55f + 0.20f * _aBright - r) * dens;
+                    g += (lf * 0.55f + 0.21f * _aBright - g) * dens;
+                    b += (lf * 0.55f + 0.23f * _aBright - b) * dens;
+                }
+                if (flash > 0f)
+                {
+                    r = r * (1f + flash * 0.55f) + 0.16f * flash;
+                    g = g * (1f + flash * 0.55f) + 0.18f * flash;
+                    b = b * (1f + flash * 0.55f) + 0.24f * flash;
+                }
 
                 // 很弱的边缘收暗
                 float vx = (uvx - 0.5f), vy = (uvy - 0.5f) * 1.2f;

@@ -5,7 +5,7 @@
     <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
     <RootNamespace>Klang_WinUI</RootNamespace>
     <!-- 版本号：“关于”页显示它，检查更新时拿它和 GitHub 上最新的 WinUI 发布比较。发新版时在这里改 -->
-    <Version>2.7.6.1</Version>
+    <Version>2.8.0.1</Version>
     <AssemblyName>Klang.Soda</AssemblyName>
     <Product>Klang Soda</Product>
     <Title>Klang Soda</Title>
@@ -28,6 +28,9 @@
     <!-- ComputeSharp 的源生成器要求（GPU 着色器） -->
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <Nullable>enable</Nullable>
+    <!-- 不把程序标记为 CET 兼容：.NET 9 起默认开启，CPU 支持 CET 但 Windows 缺少相关更新时，
+         运行时会在启动阶段直接报致命错误退出（#24，Windows 10 19041.2364） -->
+    <CETCompat>false</CETCompat>
   </PropertyGroup>
 
   <ItemGroup>
@@ -40,6 +43,8 @@
     <Content Include="Assets\StoreLogo.png" />
     <Content Include="Assets\AppIcon.ico" />
     <Content Include="Assets\AppLogo.png" />
+    <!-- 彩蛋图片（可选）：放了就用这张图代替内置的原创小人 -->
+    <Content Include="Assets\EasterEgg\*.png" />
     <!-- 发布（dotnet publish）时也要把图标等资源带上，否则发布包里没有窗口图标和关于页的 Logo -->
     <Content Update="Assets\**" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <!-- 界面语言包：键 = 中文原文，值 = 译文；往这个文件夹里加 xx.json 就多一门语言 -->

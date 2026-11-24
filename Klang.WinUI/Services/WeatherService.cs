@@ -9,7 +9,7 @@ using System.Threading.Tasks;
 namespace Klang_WinUI.Services;
 
 /// <summary>
-/// 天气（用于沉浸背景的雨 / 雪 / 阴天效果），数据来自 Open-Meteo（免费、无需账号）。
+/// 天气（用于沉浸背景的雨 / 雪 / 阴天 / 雷电 / 雾效果），数据来自 Open-Meteo（免费、无需账号）。
 /// 发送的数据：查找城市时发送输入的城市名；之后每 30 分钟发送该城市的经纬度（保留两位小数，约 1 公里）。
 /// 不发送任何账号、设备或播放信息。只在“天气效果”开启时联网。
 /// </summary>
@@ -29,7 +29,7 @@ public sealed class WeatherService
 
     private static string Sep => L.Code.StartsWith("zh", StringComparison.OrdinalIgnoreCase) ? "，" : ", ";
 
-    public sealed record Weather(int Code, int CloudCover, float Rain, float Snow, float Overcast, DateTime FetchedAt);
+    public sealed record Weather(int Code, int CloudCover, float Rain, float Snow, float Overcast, float Thunder, float Fog, DateTime FetchedAt);
 
     public sealed record Place(string Name, string Detail, double Lat, double Lon)
     {
@@ -73,8 +73,8 @@ public sealed class WeatherService
             var cur = doc.RootElement.GetProperty("current");
             int code = cur.GetProperty("weather_code").GetInt32();
             int cloud = cur.TryGetProperty("cloud_cover", out var cc) && cc.ValueKind == JsonValueKind.Number ? cc.GetInt32() : 0;
-            var (rain, snow, overcast) = Interpret(code, cloud);
-            Latest = new Weather(code, cloud, rain, snow, overcast, DateTime.Now);
+            var (rain, snow, overcast, thunder, fog) = Interpret(code, cloud);
+            Latest = new Weather(code, cloud, rain, snow, overcast, thunder, fog, DateTime.Now);
             CrashReporter.Note($"天气：代码 {code}，云量 {cloud}%");
             Updated?.Invoke();
         }
@@ -90,8 +90,8 @@ public sealed class WeatherService
 
     private static string Coord(double v) => Math.Round(v, 2).ToString("0.00", CultureInfo.InvariantCulture);
 
-    /// <summary>WMO 天气代码 → 雨 / 雪 / 阴天强度。</summary>
-    public static (float Rain, float Snow, float Overcast) Interpret(int code, int cloudCover)
+    /// <summary>WMO 天气代码 → 雨 / 雪 / 阴天 / 雷电 / 雾的强度。</summary>
+    public static (float Rain, float Snow, float Overcast, float Thunder, float Fog) Interpret(int code, int cloudCover)
     {
         float rain = code switch
         {
@@ -116,7 +116,20 @@ public sealed class WeatherService
         if (code is 45 or 48) overcast = Math.Max(overcast, 0.85f);     // 雾
         if (rain > 0 || snow > 0) overcast = Math.Max(overcast, 0.5f);
         if (code == 3) overcast = Math.Max(overcast, 0.7f);             // 阴
-        return (rain, snow, overcast);
+        float thunder = code switch
+        {
+            95 => 0.65f,                  // 雷雨
+            96 or 99 => 1.00f,            // 雷雨伴冰雹
+            _ => 0f
+        };
+        if (thunder > 0) overcast = Math.Max(overcast, 0.75f);
+        float fog = code switch
+        {
+            45 => 0.75f,                  // 雾
+            48 => 1.00f,                  // 雾凇
+            _ => 0f
+        };
+        return (rain, snow, overcast, thunder, fog);
     }
 
     /// <summary>天气代码的简短描述（设置里显示当前天气）。</summary>

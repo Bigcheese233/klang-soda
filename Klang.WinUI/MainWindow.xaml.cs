@@ -65,6 +65,15 @@ public sealed partial class MainWindow : Window
         ((FrameworkElement)Content).ActualThemeChanged += (s, e) => UpdateRail(_railTab);
         StageLyricsControl.CalibrationPicked += StageLyricsControl_CalibrationPicked;
         ImmersiveLayer.CloseRequested += (s, e) => CloseImmersive();
+        MvLayer.CloseRequested += (s, e) => CloseMv(resume: true);
+        LeftNavPane.MvRequested += (s, t) => PlayMv(t);
+        StageCoverCard.MvRequested += (s, e) => { if (_currentTrack != null) PlayMv(_currentTrack); };
+        MvLayer.FullscreenRequested += (s, e) =>
+        {
+            if (AppWindow.Presenter.Kind == AppWindowPresenterKind.FullScreen) { ExitFullscreen(); _mvSetFullscreen = false; }
+            else { EnterFullscreen(); _mvSetFullscreen = true; }
+            UpdateMvCaptionInset();
+        };
         Activated += (s, e) => { if (e.WindowActivationState == WindowActivationState.Deactivated) ImmersiveLayer.OnWindowDeactivated(); };
         ImmersiveLayer.SeekRequested += (s, t) => AudioEngineService.Instance.Seek(Math.Max(0, t - _lyricOffset));
         ImmersiveLayer.VolumeChanged += (s, v) => BottomTransportBar.SetVolume(v);
@@ -155,6 +164,8 @@ public sealed partial class MainWindow : Window
             ImmersiveLayer.SetPlaying(isPlaying);
             GalleryLayer.SetIsPlaying(isPlaying);
             StageCoverCard.SetPlaying(isPlaying);
+            ApplyDynamicCover();
+            UpdateEasterEgg();
             _taskbarPlayerWindow?.UpdatePlayState(isPlaying);
             _media.SetPlaybackState(isPlaying, _currentTrack != null);
         };
@@ -196,6 +207,10 @@ public sealed partial class MainWindow : Window
         GalleryLayer.AlbumPicked += (s, tracks) => LeftNavPane.PlayQueue(tracks);
         LeftNavPane.FavoriteToggled += (s, track) => ToggleFavorite(track);
         LeftNavPane.CloudCoverReady += (s, track) => RefreshTrackCover(track);
+        LeftNavPane.CoversAdjusted += (s, tracks) =>
+        {
+            if (_currentTrack != null && tracks.Contains(_currentTrack)) RefreshTrackCover(_currentTrack);
+        };
         MetadataService.Instance.TrackEnriched += track => DispatcherQueue.SafeEnqueue(() =>
         {
             RefreshTrackCover(track);
@@ -206,7 +221,7 @@ public sealed partial class MainWindow : Window
 
         LeftNavPane.TrackRemoved += (s, track) =>
         {
-            if (_currentTrack == track) { track.IsCurrent = false; _currentTrack = null; }
+            if (_currentTrack == track) { track.IsCurrent = false; _currentTrack = null; LoadDynamicCover(null); }
             _taskbarPlayerWindow?.UpdateTrack(_currentTrack);
         };
 
@@ -329,9 +344,14 @@ public sealed partial class MainWindow : Window
 
         WeatherService.Instance.Apply();   // 只有开启了“天气效果”并设置了城市才会联网
 
+        InitTray();
+        _ = AutoCheckUpdateAsync();
+
         this.Closed += (s, e) =>
         {
             CloseSoda();
+            _tray?.Dispose();
+            _tray = null;
             SaveWindowAndAudioState();
             LibraryService.Instance.FlushPendingSave();
             StateService.Instance.Flush();
@@ -353,7 +373,21 @@ public sealed partial class MainWindow : Window
     {
         try
         {
-            _ = Services.Netease.NeteaseService.Instance.VerifyLoginAsync();
+            Dialogs.SettingsDialog.DynamicCoverSettingChanged += () => LoadDynamicCover(_currentTrack);
+            Dialogs.SettingsDialog.EasterEggChanged += on => { StageCoverCard.SetEasterEggVisible(on); UpdateEasterEgg(); };
+            StageCoverCard.SetEasterEggVisible(State.EasterEgg);
+            UpdateEasterEgg();
+            foreach (var src in Services.Cloud.CloudSources.All)
+            {
+                // 登录状态确认后（启动时恢复的云端歌曲常常早于这一步），补取当前歌曲的动态封面
+                var s = src;
+                s.LoginChanged += () => DispatcherQueue.SafeEnqueue(() =>
+                {
+                    if (_currentTrack is { IsOnline: true } t && _dynCoverPath == null
+                        && Services.Cloud.CloudSources.For(t) == s) LoadDynamicCover(t);
+                });
+                _ = s.VerifyLoginAsync();
+            }
             await LibraryService.Instance.RestoreFromStateAsync();
             LeftNavPane.ReloadFromLibrary();
             MetadataService.Instance.Enqueue(LibraryService.Instance.Tracks);
@@ -364,6 +398,18 @@ public sealed partial class MainWindow : Window
             {
                 LeftNavPane.ResetQueue();
                 PlayTrack(last, autoPlay: false);
+            }
+            else if (State.LastOnlineQueue.Count > 0)
+            {
+                // 云端曲目不在曲库里：用保存的快照还原那首歌和当时的云端队列
+                var queue = Services.Cloud.CloudSources.FromSnapshots(State.LastOnlineQueue);
+                var online = queue.FirstOrDefault(t => t.Id == State.LastTrackId);
+                if (online != null)
+                {
+                    LeftNavPane.RestoreQueue(queue);
+                    _savedOnlineQueue = LeftNavPane.Queue;
+                    PlayTrack(online, autoPlay: false);
+                }
             }
 
             // 后台：核对文件还在不在 → 增量扫描已添加的文件夹（没变的文件直接跳过）→ 开始监视文件夹变化
@@ -502,8 +548,9 @@ public sealed partial class MainWindow : Window
 
     private void PlayTrack(TrackItem track, bool autoPlay = true)
     {
+        if (MvLayer.IsOpen) CloseMv(resume: false);   // 切到别的歌（媒体键、托盘菜单等）：关掉 MV，不再恢复原来的歌
         CrashReporter.Note($"{(autoPlay ? "播放" : "载入")}：{track.Artist} - {track.Title}" +
-            (track.SodaId.Length > 0 ? "（汽水音乐）" : track.IsOnline ? "（网易云）" : $"（{System.IO.Path.GetExtension(track.FilePath)} {track.SampleRate}Hz/{track.BitDepth}bit）") +
+            (track.IsOnline ? $"（{Services.Cloud.CloudSources.For(track)?.DisplayName ?? track.CloudSource}）" :$"（{System.IO.Path.GetExtension(track.FilePath)} {track.SampleRate}Hz/{track.BitDepth}bit）") +
             (_adoptingMix ? " 混音接入" : ""));
         _onlineCts?.Cancel();
         if (track.SodaId.Length == 0) ResetSodaChannel();
@@ -538,6 +585,10 @@ public sealed partial class MainWindow : Window
         if (HasSodaFeed) _sodaFeed?.MarkPlayed(track);
 
         StageCoverCard.UpdateTrack(track);
+        UpdateMvButton(track);
+        UpdateEasterEgg();
+        LoadDynamicCover(track);
+        UpdateTrayTip();
         UpdateNarrowHeader(track);
         // CUE 分轨暂不加载整轨歌词（整轨 .lrc 与分轨时间轴不一致）
         StageLyricsControl.CalibrationMode = false;
@@ -567,6 +618,7 @@ public sealed partial class MainWindow : Window
         if (!track.IsOnline && !track.IsCueTrack) _ = FillLocalMetaAsync(track);
 
         State.LastTrackId = track.Id;
+        SaveOnlineQueue(track);
         StateService.Instance.RequestSave();
 
         AudioEngineService.Instance.SetTrackReplayGain(track.ReplayGainDb, track.ReplayPeak);
@@ -586,6 +638,36 @@ public sealed partial class MainWindow : Window
     }
 
     private int _playSeq;
+
+    private const int MaxSavedOnlineQueue = 1000;
+    private List<TrackItem>? _savedOnlineQueue;
+
+    /// <summary>
+    /// 云端曲目不在曲库里，重启后无法按 LastTrackId 找回：把当前云端队列存成快照。
+    /// 队列没变时不重复生成；播放本地曲目后清空。
+    /// </summary>
+    private void SaveOnlineQueue(TrackItem track)
+    {
+        if (!track.IsOnline)
+        {
+            _savedOnlineQueue = null;
+            if (State.LastOnlineQueue.Count > 0) State.LastOnlineQueue = new();
+            return;
+        }
+        var queue = LeftNavPane.Queue;
+        if (ReferenceEquals(queue, _savedOnlineQueue) && queue.Contains(track)) return;
+
+        var online = queue.Where(t => t.IsOnline).ToList();
+        int i = online.IndexOf(track);
+        if (i < 0) { online = new List<TrackItem> { track }; i = 0; }
+        if (online.Count > MaxSavedOnlineQueue)
+        {
+            int start = Math.Clamp(i - MaxSavedOnlineQueue / 2, 0, online.Count - MaxSavedOnlineQueue);
+            online = online.GetRange(start, MaxSavedOnlineQueue);
+        }
+        State.LastOnlineQueue = online.Select(Services.Cloud.CloudSources.ToSnapshot).ToList();
+        _savedOnlineQueue = queue.Contains(track) ? queue : null;
+    }
 
     private System.Threading.CancellationTokenSource? _waveCts;
 
@@ -672,11 +754,19 @@ public sealed partial class MainWindow : Window
         _onlineStatus = "";
         var cts = _onlineCts = new System.Threading.CancellationTokenSource();
         var ct = cts.Token;
+        var source = Services.Cloud.CloudSources.For(track);
+        if (source == null)
+        {
+            // 来源已不存在（例如曲目来自之后被移除的平台）
+            _onlineStatus = L.T("无法获取音源（不支持的云端来源）");
+            BottomTransportBar.UpdateLyricSnippet(_onlineStatus);
+            return;
+        }
 
         int seq = _playSeq;
 
         // 歌词与音源并行获取（淡出旧曲的同时就开始请求）
-        var lyricTask = OnlineMusicService.GetLyricsAsync(track, ct);
+        var lyricTask = source.GetLyricsAsync(track.CloudId, ct);
         if (!adopted)
         {
             BottomTransportBar.UpdateLyricSnippet(autoPlay ? L.T("正在获取云端音源…") : L.T("云端曲目"));
@@ -687,14 +777,14 @@ public sealed partial class MainWindow : Window
 
         try
         {
-            bool ok = await OnlineMusicService.ResolveAsync(track, ct);
+            bool ok = await source.ResolveAsync(track, ct);
             if (ct.IsCancellationRequested || _currentTrack != track) return;
 
             if (!ok)
             {
-                _onlineStatus = OnlineMusicService.IsLoggedIn(track)
+                _onlineStatus = source.IsLoggedIn
                     ? L.T("无法获取音源（可能为会员专享或无版权）")
-                    : track.SodaId.Length > 0 ? L.T("请先登录汽水音乐") : L.T("无法获取音源（可能需要先登录网易云）");
+                    : L.F("无法获取音源（可能需要先登录{0}）", source.DisplayName);
                 BottomTransportBar.UpdateLyricSnippet(_onlineStatus);
             }
             else
@@ -723,6 +813,311 @@ public sealed partial class MainWindow : Window
         }
     }
 
+    /// <summary>彩蛋小人跟着当前歌曲的播放状态和 BPM 晃腿。</summary>
+    private void UpdateEasterEgg()
+    {
+        if (!State.EasterEgg) return;
+        StageCoverCard.UpdateEasterEgg(AudioEngineService.Instance.IsPlaying, _currentTrack?.Bpm ?? 0);
+    }
+
+    #region 启动时自动检查更新
+
+    private UpdateInfo? _pendingUpdate;
+    private bool _updateDialogOpen;
+
+    /// <summary>启动后稍等片刻检查 GitHub 上的新版本；失败时不打扰用户，只记日志。</summary>
+    private async System.Threading.Tasks.Task AutoCheckUpdateAsync()
+    {
+        if (!State.AutoCheckUpdate) return;
+        await System.Threading.Tasks.Task.Delay(TimeSpan.FromSeconds(8));   // 不和启动时的曲库恢复、扫描抢资源
+        UpdateInfo info;
+        try { info = await UpdateService.CheckAsync(); }
+        catch (Exception ex) { App.LogError("UpdateCheck", ex.Message); return; }
+        if (!info.HasUpdate || info.Latest == null) return;
+        if (State.SkippedUpdateVersion == info.Latest.ToString(3)) return;
+        CrashReporter.Note("发现新版本 " + info.Latest.ToString(3));
+        _pendingUpdate = info;
+        ShowPendingUpdate();
+    }
+
+    /// <summary>
+    /// 弹出新版本提示。窗口藏在托盘里、沉浸模式打开着、或者正有别的对话框时先不弹，
+    /// 等窗口恢复 / 退出沉浸模式时再弹（每次启动最多提示一次）。
+    /// </summary>
+    private async void ShowPendingUpdate()
+    {
+        var info = _pendingUpdate;
+        if (info == null || _updateDialogOpen || !AppWindow.IsVisible || ImmersiveLayer.IsOpen || Content?.XamlRoot == null) return;
+        _updateDialogOpen = true;
+        try
+        {
+            var notes = CleanReleaseNotes(info.Notes);
+            var dlg = new ContentDialog
+            {
+                Style = Application.Current.Resources["DefaultContentDialogStyle"] as Style,
+                RequestedTheme = ThemeService.Current,
+                XamlRoot = Content.XamlRoot,
+                Title = L.F("发现新版本 {0}", info.Latest!.ToString(3)),
+                Content = new StackPanel
+                {
+                    Spacing = 10,
+                    Children =
+                    {
+                        new TextBlock { Text = L.F("当前版本 {0}", UpdateService.CurrentVersionText), Opacity = 0.7 },
+                        new ScrollViewer
+                        {
+                            MaxHeight = 280,
+                            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+                            Content = new TextBlock { Text = notes.Length > 0 ? notes : L.T("（发布说明为空）"), TextWrapping = TextWrapping.Wrap, IsTextSelectionEnabled = true }
+                        }
+                    }
+                },
+                PrimaryButtonText = L.T("下载"),
+                SecondaryButtonText = L.T("跳过此版本"),
+                CloseButtonText = L.T("稍后"),
+                DefaultButton = ContentDialogButton.Primary
+            };
+            ContentDialogResult result;
+            try { result = await dlg.ShowAsync(); }
+            catch (Exception)   // 同一时间只能有一个对话框：别的对话框开着时，过一会儿再试
+            {
+                _updateDialogOpen = false;
+                await System.Threading.Tasks.Task.Delay(TimeSpan.FromSeconds(30));
+                ShowPendingUpdate();
+                return;
+            }
+            _pendingUpdate = null;
+            if (result == ContentDialogResult.Primary)
+            {
+                var url = UpdateService.IsTrustedUrl(info.DownloadUrl) ? info.DownloadUrl : info.PageUrl;
+                if (UpdateService.IsTrustedUrl(url)) { try { await Windows.System.Launcher.LaunchUriAsync(new Uri(url!)); } catch { } }
+            }
+            else if (result == ContentDialogResult.Secondary)
+            {
+                State.SkippedUpdateVersion = info.Latest.ToString(3);
+                StateService.Instance.RequestSave();
+            }
+        }
+        finally
+        {
+            _updateDialogOpen = false;
+        }
+    }
+
+    /// <summary>发布说明是 Markdown：去掉标题井号和加粗符号，按纯文本显示。</summary>
+    private static string CleanReleaseNotes(string md)
+    {
+        if (string.IsNullOrWhiteSpace(md)) return "";
+        var lines = md.Replace("\r\n", "\n").Split('\n')
+            .Select(l => System.Text.RegularExpressions.Regex.Replace(l, @"^\s*#{1,6}\s*", ""))
+            .Select(l => l.Replace("**", "").Replace("`", ""));
+        return string.Join("\n", lines).Trim();
+    }
+
+    #endregion
+
+    #region 系统托盘 / 关闭按钮
+
+    private Views.TrayIcon? _tray;
+    private bool _exiting, _closePromptOpen;
+
+    private void InitTray()
+    {
+        AppWindow.Closing += AppWindow_Closing;
+        UpdateTrayIcon();
+    }
+
+    /// <summary>关闭行为不是“直接退出”，或者窗口正藏在托盘里时，显示托盘图标。</summary>
+    public void UpdateTrayIcon()
+    {
+        bool want = State.CloseAction != "exit" || !AppWindow.IsVisible;
+        if (want && _tray == null)
+        {
+            try
+            {
+                _tray = new Views.TrayIcon
+                {
+                    IsPlaying = () => AudioEngineService.Instance.IsPlaying,
+                    IsDark = () => (Content as FrameworkElement)?.ActualTheme == ElementTheme.Dark
+                };
+                _tray.ShowRequested += ShowFromTray;
+                _tray.PlayPauseRequested += TogglePlayPause;
+                _tray.PrevRequested += PlayPrev;
+                _tray.NextRequested += PlayNext;
+                _tray.ExitRequested += ExitApp;
+                UpdateTrayTip();
+            }
+            catch (Exception ex)
+            {
+                App.LogError("Tray", ex.Message);
+                _tray = null;
+            }
+        }
+        else if (!want && _tray != null)
+        {
+            _tray.Dispose();
+            _tray = null;
+        }
+    }
+
+    private void UpdateTrayTip() =>
+        _tray?.SetToolTip(_currentTrack == null ? AppIdentity.Name : $"{_currentTrack.Title} - {_currentTrack.Artist}");
+
+    /// <summary>
+    /// 关掉当前打开的对话框（设置、更新提示等），等它真正关闭后返回；没有打开的对话框时返回 false。
+    /// 对话框开着时直接关闭窗口，进程会在 CoreMessagingXP.dll 里崩溃；同一时间也只能开一个对话框，关闭询问弹不出来。
+    /// </summary>
+    private async System.Threading.Tasks.Task<bool> CloseOpenDialogsAsync()
+    {
+        if (Content?.XamlRoot is not { } root) return false;
+        var waits = new List<System.Threading.Tasks.Task>();
+        foreach (var popup in Microsoft.UI.Xaml.Media.VisualTreeHelper.GetOpenPopupsForXamlRoot(root))
+        {
+            if (popup.Child is not ContentDialog dlg) continue;
+            var tcs = new System.Threading.Tasks.TaskCompletionSource();
+            dlg.Closed += (s, e) => tcs.TrySetResult();
+            dlg.Hide();
+            waits.Add(tcs.Task);
+        }
+        if (waits.Count == 0) return false;
+        await System.Threading.Tasks.Task.WhenAny(System.Threading.Tasks.Task.WhenAll(waits), System.Threading.Tasks.Task.Delay(1500));
+        await System.Threading.Tasks.Task.Delay(50);   // 让对话框的关闭动画和弹出层清理走完
+        return true;
+    }
+
+    private async void AppWindow_Closing(Microsoft.UI.Windowing.AppWindow sender, Microsoft.UI.Windowing.AppWindowClosingEventArgs args)
+    {
+        string action = _exiting ? "exit" : State.CloseAction;
+        if (action == "exit")
+        {
+            // 有对话框开着：先取消这次关闭，关掉对话框后再关窗口
+            if (Content?.XamlRoot != null && Microsoft.UI.Xaml.Media.VisualTreeHelper.GetOpenPopupsForXamlRoot(Content.XamlRoot).Any(p => p.Child is ContentDialog))
+            {
+                args.Cancel = true;
+                _exiting = true;
+                await CloseOpenDialogsAsync();
+                Close();
+            }
+            return;
+        }
+
+        args.Cancel = true;
+        if (action == "tray")
+        {
+            await CloseOpenDialogsAsync();
+            HideToTray();
+            return;
+        }
+
+        // 第一次（或没记住选择时）：询问
+        if (_closePromptOpen) return;
+        _closePromptOpen = true;
+        try
+        {
+            await CloseOpenDialogsAsync();
+            var remember = new CheckBox { Content = L.T("记住我的选择，不再询问"), Margin = new Thickness(0, 12, 0, 0) };
+            var dlg = new ContentDialog
+            {
+                Style = Application.Current.Resources["DefaultContentDialogStyle"] as Style,
+                RequestedTheme = ThemeService.Current,
+                XamlRoot = Content.XamlRoot,
+                Title = L.T("关闭 Klang Soda"),
+                Content = new StackPanel
+                {
+                    Children =
+                    {
+                        new TextBlock { Text = L.T("最小化到系统托盘后会继续在后台播放，可以从托盘图标重新打开或退出。"), TextWrapping = TextWrapping.Wrap },
+                        remember
+                    }
+                },
+                PrimaryButtonText = L.T("最小化到托盘"),
+                SecondaryButtonText = L.T("退出"),
+                CloseButtonText = L.T("取消"),
+                DefaultButton = ContentDialogButton.Primary
+            };
+            ContentDialogResult result;
+            try { result = await dlg.ShowAsync(); }
+            catch (Exception ex) { App.LogError("ClosePrompt", ex.Message); return; }   // 仍有对话框没关掉时 ShowAsync 会抛异常
+            if (result == ContentDialogResult.None) return;
+            bool toTray = result == ContentDialogResult.Primary;
+            if (remember.IsChecked == true)
+            {
+                State.CloseAction = toTray ? "tray" : "exit";
+                StateService.Instance.RequestSave();
+            }
+            if (toTray) HideToTray(); else ExitApp();
+        }
+        finally
+        {
+            _closePromptOpen = false;
+        }
+    }
+
+    private void HideToTray()
+    {
+        CrashReporter.Note("最小化到托盘");
+        SaveWindowAndAudioState();
+        StateService.Instance.Flush();
+        AppWindow.Hide();
+        UpdateTrayIcon();
+    }
+
+    /// <summary>从托盘恢复（或第二次启动 Klang 时把已有窗口带到前台）。</summary>
+    public void ShowFromTray()
+    {
+        AppWindow.Show();
+        if (AppWindow.Presenter is Microsoft.UI.Windowing.OverlappedPresenter { State: Microsoft.UI.Windowing.OverlappedPresenterState.Minimized } p) p.Restore();
+        Activate();
+        UpdateTrayIcon();
+        ShowPendingUpdate();   // 藏在托盘期间发现的新版本，窗口恢复后再提示
+    }
+
+    /// <summary>真正退出（托盘菜单、关闭询问里选“退出”）。</summary>
+    private void ExitApp()
+    {
+        _exiting = true;
+        Close();
+    }
+
+    #endregion
+
+    #region 动态封面
+
+    private string? _dynCoverPath;
+    private System.Threading.CancellationTokenSource? _dynCoverCts;
+
+    /// <summary>换歌时取这首歌的动态封面（目前只有网易云，需要登录）；取到后盖在静态封面上播放。</summary>
+    private async void LoadDynamicCover(TrackItem? track)
+    {
+        _dynCoverCts?.Cancel();
+        _dynCoverCts = null;
+        _dynCoverPath = null;
+        ApplyDynamicCover();
+        if (track == null || !track.IsOnline || !State.DynamicCover) return;
+        var source = Services.Cloud.CloudSources.For(track);
+        if (source == null) return;
+
+        var cts = _dynCoverCts = new System.Threading.CancellationTokenSource();
+        string? path = null;
+        try { path = await source.GetDynamicCoverAsync(track.CloudId, cts.Token); }
+        catch (OperationCanceledException) { return; }
+        catch (Exception ex) { App.LogError("DynamicCover", ex.Message); }
+        if (cts.IsCancellationRequested || _currentTrack != track || path == null) return;
+        _dynCoverPath = path;
+        ApplyDynamicCover();
+    }
+
+    /// <summary>动态封面只在当前看得到的那个封面上播放：沉浸模式打开时在沉浸界面，否则在主界面；随音乐暂停。</summary>
+    private void ApplyDynamicCover()
+    {
+        bool playing = AudioEngineService.Instance.IsPlaying;
+        bool immersive = ImmersiveLayer.IsOpen;
+        StageCoverCard.SetDynamicCover(immersive ? null : _dynCoverPath, playing);
+        ImmersiveLayer.SetDynamicCover(immersive ? _dynCoverPath : null, playing);
+    }
+
+    #endregion
+
     /// <summary>云端封面缓存完成后刷新各处封面。</summary>
     private void RefreshTrackCover(TrackItem track)
     {
@@ -740,6 +1135,8 @@ public sealed partial class MainWindow : Window
 
     private void TogglePlayPause()
     {
+        // MV 播放中：系统媒体键 / 托盘菜单的播放暂停作用于 MV
+        if (MvLayer.IsOpen) { MvLayer.TogglePlayPause(); return; }
         var engine = AudioEngineService.Instance;
         if (_sodaChoosing || _sodaAdvancing)
         {
@@ -819,6 +1216,7 @@ public sealed partial class MainWindow : Window
 
     private void PlayNext()
     {
+        if (MvLayer.IsOpen) CloseMv(resume: false);
         if (TryPlaySodaNext()) return;
         TrackItem? next; string? reason; bool byRoam;
         if (_preChosenNext != null)
@@ -861,7 +1259,7 @@ public sealed partial class MainWindow : Window
                 if (next != null) { _preChosenNext = next; _preChosenReason = reason; _preChosenByRoam = byRoam; }
             }
             if (next == null || next == cur || !next.IsOnline) return;
-            OnlineMusicService.Prefetch(next);
+            Services.Cloud.CloudSources.For(next)?.Prefetch(next);
         }
         catch { }
     }
@@ -907,14 +1305,16 @@ public sealed partial class MainWindow : Window
             // 剩余时间不多了还没好，就放弃混音，照常切歌
             if (next.IsOnline)
             {
-                if (!OnlineMusicService.IsCached(next))
+                var source = Services.Cloud.CloudSources.For(next);
+                if (source == null) return;
+                if (!source.IsCached(next))
                 {
-                    OnlineMusicService.Prefetch(next);
+                    source.Prefetch(next);
                     if (remaining > 12) _plannedFromId = null;
                     return;
                 }
                 if (string.IsNullOrEmpty(next.FilePath) || !System.IO.File.Exists(next.FilePath))
-                    await OnlineMusicService.ResolveAsync(next, System.Threading.CancellationToken.None);
+                    await source.ResolveAsync(next, System.Threading.CancellationToken.None);   // 已缓存：只是把本地路径写到曲目上
             }
             if (string.IsNullOrEmpty(next.FilePath) || !System.IO.File.Exists(next.FilePath)) return;
 
@@ -972,6 +1372,7 @@ public sealed partial class MainWindow : Window
     private void PlayPrev()
     {
         if (_sodaChoosing || _sodaAdvancing) CancelPendingSodaPlayback();
+        if (MvLayer.IsOpen) CloseMv(resume: false);
         var tracks = LeftNavPane.Queue;
         if (tracks.Count == 0) return;
 
@@ -1047,7 +1448,16 @@ public sealed partial class MainWindow : Window
         if (key == VirtualKey.F11)
         {
             ToggleFullscreen();
+            if (MvLayer.IsOpen) UpdateMvCaptionInset();
             e.Handled = true;
+            return;
+        }
+        // MV 播放层打开时：Esc 关闭、空格暂停 / 继续；方向键交给播放控制条，其余快捷键不响应（底下的播放器让出了声卡）
+        if (MvLayer.IsOpen)
+        {
+            if (key == VirtualKey.Escape) { CloseMv(resume: true); e.Handled = true; }
+            else if (key == VirtualKey.Space && !typing) { MvLayer.TogglePlayPause(); e.Handled = true; }
+            else if (key is not (VirtualKey.Left or VirtualKey.Right or VirtualKey.Up or VirtualKey.Down or VirtualKey.Tab or VirtualKey.Enter)) e.Handled = true;
             return;
         }
         if (key == VirtualKey.Escape && GalleryLayer.Visibility == Visibility.Visible)
@@ -1344,9 +1754,17 @@ public sealed partial class MainWindow : Window
         State.TaskbarPlayerEnabled = enabled;
         TaskbarPlayerItem.IsChecked = enabled;
         StateService.Instance.RequestSave();
+        if (!enabled)
+        {
+            // 关掉就整个关闭窗口：连同后台的任务栏查询线程一起停掉，不再占用 Klang 和 Explorer 的 CPU
+            var w = _taskbarPlayerWindow;
+            _taskbarPlayerWindow = null;
+            if (w != null) { w.SetEnabled(false); w.Close(); }
+            return;
+        }
         _taskbarPlayerWindow?.UpdateTrack(_currentTrack);
         _taskbarPlayerWindow?.UpdatePlayState(AudioEngineService.Instance.IsPlaying);
-        _taskbarPlayerWindow?.SetEnabled(enabled);
+        _taskbarPlayerWindow?.SetEnabled(true);
     }
 
     private void ToggleMiniPlayer()
@@ -1422,6 +1840,30 @@ public sealed partial class MainWindow : Window
         _lyricOffset = 0;
         if (track != null && State.LyricOffsets.TryGetValue(track.Id, out var o)) _lyricOffset = o;
         UpdateOffsetLabel();
+        // 本地双语歌词的“原文与翻译对调”也按歌曲记住；在载入新歌词之前设好
+        StageLyricsControl.SwapPairs = track != null && State.LyricSwapTracks.Contains(track.Id);
+    }
+
+    private void LyricMenu_Opening(object? sender, object e)
+    {
+        SwapPairsItem.IsEnabled = StageLyricsControl.HasPairedLines;
+        SwapPairsItem.IsChecked = StageLyricsControl.SwapPairs;
+        ToolTipService.SetToolTip(SwapPairsItem, SwapPairsItem.IsEnabled
+            ? L.T("双语歌词把原文和翻译认反时使用，按歌曲记住")
+            : L.T("当前歌词没有同一时间写成两行的双语歌词"));
+    }
+
+    private void SwapPairsItem_Click(object sender, RoutedEventArgs e)
+    {
+        if (_currentTrack == null || !StageLyricsControl.HasPairedLines) return;
+        bool swap = !StageLyricsControl.SwapPairs;
+        StageLyricsControl.SwapPairs = swap;
+        State.LyricSwapTracks.Remove(_currentTrack.Id);
+        if (swap) State.LyricSwapTracks.Add(_currentTrack.Id);
+        StateService.Instance.RequestSave();
+        SyncImmersive();
+        _desktopLyricWindow?.UpdateLyrics(StageLyricsControl.Lyrics);
+        BottomTransportBar.UpdateLyricSnippet(swap ? L.T("已对调原文与翻译") : L.T("已恢复原文与翻译"));
     }
 
     private void SetLyricOffset(double v)
@@ -1516,7 +1958,9 @@ public sealed partial class MainWindow : Window
     {
         try
         {
-            var b = await Services.Netease.NeteaseService.Instance.GetLyricsAsync(track.NeteaseId);
+            var source = Services.Cloud.CloudSources.For(track);
+            if (source == null) return;
+            var b = await source.GetLyricsAsync(track.CloudId);
             if (_currentTrack != track || string.IsNullOrWhiteSpace(b.Lrc) || LyricsService.HasChosen(track.Id)) return;
             StageLyricsControl.LoadLyricLines(LyricsService.Instance.ParseLrc(b.Lrc, b.Trans, b.Roma));
             SyncImmersive();
@@ -1557,6 +2001,56 @@ public sealed partial class MainWindow : Window
     }
 
     private bool _immersiveSetFullscreen;
+
+    // ---------------- MV ----------------
+
+    private bool _mvSetFullscreen, _mvResumePlay;
+
+    /// <summary>
+    /// 播放这首歌的 MV：暂停当前的歌并让出声卡（独占模式下普通暂停仍占着设备，MV 会没声音），
+    /// MV 用它自己的声音播放；关闭后回到原来的歌和位置。
+    /// </summary>
+    public async void PlayMv(TrackItem track)
+    {
+        var source = Services.Cloud.CloudSources.For(track);
+        if (source == null || !source.SupportsMv || MvLayer.IsOpen) return;
+        CrashReporter.Note($"播放 MV：{track.Artist} - {track.Title}");
+        if (ImmersiveLayer.IsOpen) CloseImmersive();
+        if (GalleryLayer.Visibility == Visibility.Visible) CloseGallery();
+        _mvResumePlay = AudioEngineService.Instance.IsPlaying;
+        UpdateMvCaptionInset();
+        MvLayer.Open(track, source);
+        await AudioEngineService.Instance.SuspendOutputAsync();
+    }
+
+    /// <summary>MV 播放层的全屏按钮图标跟随窗口当前是否全屏。</summary>
+    private void UpdateMvCaptionInset()
+    {
+        double scale = Content?.XamlRoot?.RasterizationScale ?? 1.0;
+        double titleBar = AppWindow.TitleBar.Height > 0 ? AppWindow.TitleBar.Height / scale : 48;
+        MvLayer.SetFullscreenState(AppWindow.Presenter.Kind == AppWindowPresenterKind.FullScreen, titleBar);
+    }
+
+    /// <summary>封面上的 MV 按钮：当前歌曲有 MV 才显示；还不知道有没有时（从保存的队列恢复的）先查一下。</summary>
+    private async void UpdateMvButton(TrackItem track)
+    {
+        var source = Services.Cloud.CloudSources.For(track);
+        bool supported = track.IsOnline && source?.SupportsMv == true;
+        StageCoverCard.SetMvAvailable(supported && track.HasMv);
+        if (!supported || track.MvId.Length > 0) return;
+        try { await source!.EnsureMvIdAsync(track); } catch { return; }
+        if (_currentTrack == track) StageCoverCard.SetMvAvailable(track.HasMv);
+    }
+
+    private void CloseMv(bool resume)
+    {
+        if (!MvLayer.IsOpen) return;
+        MvLayer.Close();
+        if (_mvSetFullscreen) { ExitFullscreen(); _mvSetFullscreen = false; }
+        var engine = AudioEngineService.Instance;
+        if (resume && engine.IsSuspended) engine.ResumeOutput(_mvResumePlay);
+        else engine.ForgetSuspended();
+    }
 
     private void ImmersiveBtn_Click(object sender, RoutedEventArgs e) => ToggleImmersive();
 
@@ -1665,6 +2159,7 @@ public sealed partial class MainWindow : Window
         ImmersiveLayer.SubMode = State.LyricSubMode;
         ImmersiveLayer.Open();
         SyncImmersive();
+        ApplyDynamicCover();
         if (AppWindow.Presenter.Kind != AppWindowPresenterKind.FullScreen)
         {
             EnterFullscreen();
@@ -1682,6 +2177,8 @@ public sealed partial class MainWindow : Window
         bool fly = ImmersiveLayer.IsOpen && StageCoverVisible && PrepareCoverAnimation("fromImmersive", ImmersiveLayer.CoverTarget);
 
         ImmersiveLayer.Close();
+        ApplyDynamicCover();
+        ShowPendingUpdate();   // 沉浸模式期间发现的新版本，退出后再提示
         if (_immersiveSetFullscreen)
         {
             ExitFullscreen();
